@@ -19,3 +19,7 @@ Thumbs.db
 
 # Project secrets
 secrets.json
+
+# datasets
+Data/binance/*.csv
+Data/Test/*.csv
