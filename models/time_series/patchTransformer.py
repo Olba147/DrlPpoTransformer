@@ -56,21 +56,25 @@ class PatchTSTEncoder(nn.Module):
         self,
         patch_len: int,
         d_model: int = 512,          # transformer hidden dim
+        n_features: int = 9,
+        n_time_features: int = 2,
         nhead: int = 8,              # num of attention heads   
         num_layers: int = 4,         # num of transformer blocks
         dim_ff: int = 512,           # FFN hidden dim
         dropout: float = 0.1,
         add_cls: bool = True,
         pooling: str = "cls",        # "cls" | "mean"
-        task: str = "embedding",     # "embedding" | "forecast"
         pred_len: int = 96
     ):
         super().__init__()
         self.patch_len = patch_len
-        self.add_cls, self.pooling, self.task, self.pred_len = add_cls, pooling, task, pred_len
+        self.add_cls, self.pooling, self.pred_len = add_cls, pooling, pred_len
 
-        self.proj_price = nn.Linear(patch_len * 6, d_model)
-        self.proj_time  = nn.Linear(patch_len * 4, d_model)  # 4 = sin/cos weekday + sin/cos minute
+        self.n_features = n_features
+        self.n_time_features = n_time_features
+
+        self.proj_price = nn.Linear(patch_len * self.n_features, d_model)
+        self.proj_time  = nn.Linear(patch_len * self.n_time_features * 2, d_model)  # 4 = sin/cos weekday + sin/cos minute
         self.time_gate  = nn.Parameter(torch.tensor(1.0))    # optional learnable scale
 
         self.posenc = PositionalEncoding(d_model, max_len=10000)
@@ -80,20 +84,13 @@ class PatchTSTEncoder(nn.Module):
             dropout=dropout, activation="gelu", batch_first=True
         )
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+        self.final_norm = nn.LayerNorm(d_model)
 
         self.cls = nn.Parameter(torch.zeros(1,1,d_model)) if add_cls else None
         if self.cls is not None:
             nn.init.trunc_normal_(self.cls, std=0.02)
 
-        if task == "forecast":
-            self.head = nn.Sequential(
-                nn.Linear(d_model, d_model),
-                nn.GELU(),
-                nn.Dropout(dropout),
-                nn.Linear(d_model, pred_len)  # y is [B, pred_len]
-            )
-        else:
-            self.head = nn.Identity()
+        self.head = nn.Identity()
 
     def _encode_time_patch(self, time_cont_patch: torch.Tensor) -> torch.Tensor:
         """
@@ -123,6 +120,7 @@ class PatchTSTEncoder(nn.Module):
           task='forecast'  -> [B, pred_len]
         """
         # Project price & time separately, then fuse
+        print(X_patch.shape, time_cont_patch.shape)
         Tp_flat = self._encode_time_patch(time_cont_patch)   # [B, N, P*4]
         tok = self.proj_price(X_patch) + self.time_gate * self.proj_time(Tp_flat)  # [B, N, D]
 
@@ -132,16 +130,12 @@ class PatchTSTEncoder(nn.Module):
 
         tok = self.posenc(tok)
         z = self.encoder(tok)                                 # [B, T, D]
+        z = self.final_norm(z)
 
         # Readout
-        if self.task == "embedding":
-            if self.add_cls and self.pooling == "cls":
-                return z[:, 0]                                # [B, D]
-            elif self.pooling == "mean":
-                return z.mean(dim=1)                          # [B, D]
-            else:
-                return z[:, 1:].mean(dim=1) if self.add_cls else z.mean(dim=1)
+        if self.add_cls and self.pooling == "cls":
+            return z[:, 0]                                # [B, D]
+        elif self.pooling == "mean":
+            return z.mean(dim=1)                          # [B, D]
         else:
-            pooled = z[:, 0] if (self.add_cls and self.pooling == "cls") else \
-                     (z.mean(dim=1) if self.pooling == "mean" else (z[:,1:].mean(dim=1) if self.add_cls else z.mean(dim=1)))
-            return self.head(pooled)                          # [B, pred_len]
+            return z[:, 1:].mean(dim=1) if self.add_cls else z.mean(dim=1)

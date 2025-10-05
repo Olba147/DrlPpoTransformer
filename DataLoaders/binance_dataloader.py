@@ -21,6 +21,7 @@ class SeqConfig:
     val_ratio: float = 0.15
     standardize: bool = True   # z-score per feature on TRAIN slice
     use_patching: bool = True  # default; can be overridden by create_dataloaders(..., use_patch=...)
+    start_date: Optional[str] = None
 
 # --------------- Small helpers ------------
 
@@ -110,6 +111,14 @@ class JointSeqDataset(Dataset):
     ):
         usecols = ["open", "high", "low", "close", "volume", "quote_asset_volume", "close_time"]
         df = pd.read_csv(cfg.csv_path, usecols=usecols)
+
+        if cfg.start_date is not None:
+            # filter by start date
+            # read the start date and convert to milliseconds
+            start_date = pd.to_datetime(cfg.start_date).timestamp() * 1000
+            df = df[df["close_time"] >= start_date]
+
+
         X_np, W_np, TC_np = _build_arrays(df)
 
         X = torch.from_numpy(X_np)
