@@ -75,13 +75,13 @@ class PatchTSTEncoder(nn.Module):
 
         self.proj_price = nn.Linear(patch_len * self.n_features, d_model)
         self.proj_time  = nn.Linear(patch_len * self.n_time_features * 2, d_model)  # 4 = sin/cos weekday + sin/cos minute
-        self.time_gate  = nn.Parameter(torch.tensor(1.0))    # optional learnable scale
+        self.time_gate  = nn.Parameter(torch.tensor(0.1))    # optional learnable scale
 
         self.posenc = PositionalEncoding(d_model, max_len=10000)
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=d_model, nhead=nhead, dim_feedforward=dim_ff,
-            dropout=dropout, activation="gelu", batch_first=True
+            dropout=dropout, activation="gelu", batch_first=True, norm_first=True
         )
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
         self.final_norm = nn.LayerNorm(d_model)
@@ -120,7 +120,6 @@ class PatchTSTEncoder(nn.Module):
           task='forecast'  -> [B, pred_len]
         """
         # Project price & time separately, then fuse
-        print(X_patch.shape, time_cont_patch.shape)
         Tp_flat = self._encode_time_patch(time_cont_patch)   # [B, N, P*4]
         tok = self.proj_price(X_patch) + self.time_gate * self.proj_time(Tp_flat)  # [B, N, D]
 

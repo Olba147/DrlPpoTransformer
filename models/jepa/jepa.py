@@ -3,10 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class JEPA(nn.Module):
-    def __init__(self, context_enc, target_enc, d_model):
+    def __init__(self, context_enc, target_enc, d_model, ema_start, ema_end, n_epochs):
         super().__init__()
         self.context_enc = context_enc
         self.target_enc  = target_enc
+        
+        self.ema_rate = torch.linspace(ema_start, ema_end, n_epochs)
 
         # projector with normalization
         def make_projector():
@@ -31,9 +33,6 @@ class JEPA(nn.Module):
 
     def forward(self, X_ctx, T_ctx, X_tgt, T_tgt):
 
-        #print shapes
-        print("x_ctx", X_ctx.shape, "T_ctx", T_ctx.shape, "x_tgt", X_tgt.shape, "T_tgt", T_tgt.shape)
-
         z_c = self.proj_online(self.context_enc(X_ctx, T_ctx))        # [B, D]
         with torch.no_grad():
             z_t = self.proj_target(self.target_enc(X_tgt, T_tgt))     # [B, D]
@@ -42,7 +41,12 @@ class JEPA(nn.Module):
         return p_c, z_t
 
     @torch.no_grad()
-    def ema_update(self, decay=0.999):
+    def ema_update(self, epoch):
+
+        # take the last index of ema_rate if epoch > len(ema_rate)
+        if epoch >= len(self.ema_rate):
+            epoch = len(self.ema_rate) -1
+        decay = self.ema_rate[epoch]
         for pt, pc in zip(self.target_enc.parameters(), self.context_enc.parameters()):
             pt.data.mul_(decay).add_(pc.data, alpha=1.0 - decay)
         for pt, pc in zip(self.proj_target.parameters(), self.proj_online.parameters()):

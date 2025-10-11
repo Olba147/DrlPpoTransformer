@@ -6,6 +6,8 @@ import csv
 import math
 import torch
 from torch.utils.data import DataLoader
+from torch.nn import functional as F
+import time
 
 # ----------------------------
 # Minimal callback primitives
@@ -143,6 +145,7 @@ class StatsPrinter(Callback):
 
     def __init__(self, log_every: int = 100):
         self.log_every = log_every
+        self.start_time = time.time()
 
     def before_fit(self):
         self.step = 0
@@ -151,7 +154,7 @@ class StatsPrinter(Callback):
         self.step += 1
         if self.learn.training and (self.step % self.log_every == 0):
             lr = self.learn.opt.param_groups[0]["lr"] if self.learn.opt else float("nan")
-            print(f"[train] step={self.step} loss={loss.item():.5f} lr={lr:.2e}")
+            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f} lr={lr:.2e} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
 
     def after_epoch(self):
         print(f"Epoch {self.learn.epoch+1}/{self.learn.n_epochs} "
@@ -254,6 +257,7 @@ class Learner:
         device: Optional[torch.device] = None,
         grad_clip: Optional[float] = None,
         amp: bool = False,                  # fp16 autocast
+        start_epoch: int = 0
     ):
     
         self.model = model
@@ -275,10 +279,17 @@ class Learner:
 
         # training state
         self.training = True
-        self.epoch = 0
+        self.start_epoch = start_epoch
+        self.epoch = start_epoch
         self.n_epochs = None
         self.epoch_train_loss: float = float("nan")
         self.epoch_val_loss: float = float("nan")
+        
+        # additional tracking
+        self.cosine_similarity = None
+        self.std_ctx = None
+        self.std_tgt = None
+
 
     # ---- helpers to call callbacks ----
     def _cb(self, name: str, *args, **kwargs):
@@ -289,7 +300,7 @@ class Learner:
         self.n_epochs = n_epochs
         self._cb("before_fit")
         for ep in range(n_epochs):
-            self.epoch = ep
+            self.epoch = self.start_epoch + ep
             self._one_epoch(train=True)
             if self.val_dl is not None:
                 self._one_epoch(train=False)
@@ -337,6 +348,18 @@ class Learner:
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
                 self.scaler.step(self.opt)
                 self.scaler.update()
+
+                # jepa ema update
+                if hasattr(self.model, "ema_update"):
+                    self.model.ema_update(epoch=self.epoch)
+
+
+                # calculate cosine similarity for each batch for tracking
+                with torch.no_grad():
+                    self.cosine_similarity  = F.cosine_similarity(pred[0], pred[1], dim=1).mean().item()
+                    self.std_ctx = pred[0].std(dim=0).mean().item()
+                    self.std_tgt = pred[1].std(dim=0).mean().item()
+
                 self._cb("after_step")
 
             total_loss += loss.detach().item()
