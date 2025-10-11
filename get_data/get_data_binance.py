@@ -223,7 +223,7 @@ def main() -> None:
     latest_close: Optional[int] = None
 
     try:
-        file_name =  f"Data/binance/{symbol}_{args.interval}_{start_ms}_{end_ms}_klines.csv"
+        file_name =  f"../Data/binance/{symbol}_{args.interval}_{start_ms}_{end_ms}_klines.csv"
         with open(file_name, "w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(COLUMN_NAMES)
