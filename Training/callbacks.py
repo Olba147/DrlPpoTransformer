@@ -241,3 +241,111 @@ class CheckpointCallback(Callback):
                         "epoch": self.learn.epoch}, path)
             print(f"[ckpt] Saved periodic to {path}")
 
+
+# ----------------------------
+# PPO callbacks
+# ----------------------------
+
+
+class PPOCallback:
+    order: int = 0
+
+    def set_trainer(self, trainer):
+        self.trainer = trainer
+
+    def on_train_start(self): pass
+    def on_train_end(self): pass
+    def on_rollout_end(self, rollout, update: int): pass
+    def on_update_end(self, metrics: Dict[str, float], update: int): pass
+    def on_eval_end(self, metrics: Dict[str, float], update: int): pass
+
+
+class PPOStatsPrinter(PPOCallback):
+    order = 10
+
+    def __init__(self, log_every: int = 1):
+        self.log_every = log_every
+        self.start_time = time.time()
+
+    def on_train_start(self):
+        self.update = 0
+
+    def on_update_end(self, metrics: Dict[str, float], update: int):
+        self.update = update
+        if update % self.log_every != 0:
+            return
+        elapsed = time.time() - self.start_time
+        print(
+            "[ppo] "
+            f"update={update} "
+            f"time={elapsed:.1f}s "
+            f"policy_loss={metrics.get('policy_loss', float('nan')):.4f} "
+            f"value_loss={metrics.get('value_loss', float('nan')):.4f} "
+            f"entropy={metrics.get('entropy', float('nan')):.4f} "
+            f"kl={metrics.get('kl', float('nan')):.4f} "
+            f"clip_frac={metrics.get('clip_fraction', float('nan')):.3f} "
+            f"mean_reward={metrics.get('mean_reward', float('nan')):.4f} "
+            f"mean_turnover={metrics.get('mean_turnover', float('nan')):.4f}"
+        )
+
+    def on_eval_end(self, metrics: Dict[str, float], update: int):
+        print(
+            "[ppo-eval] "
+            f"update={update} "
+            f"return={metrics.get('eval_return', float('nan')):.4f} "
+            f"length={metrics.get('eval_length', float('nan')):.1f}"
+        )
+
+
+class PPOCSVLogger(PPOCallback):
+    order = 20
+
+    def __init__(self, path: str = "logs/ppo_train_log.csv"):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self._wrote_header = False
+
+    def on_update_end(self, metrics: Dict[str, float], update: int):
+        row = {"update": update, **metrics}
+        write_header = not os.path.exists(self.path) or (not self._wrote_header)
+        with open(self.path, "a", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if write_header:
+                w.writeheader()
+                self._wrote_header = True
+            w.writerow(row)
+
+    def on_eval_end(self, metrics: Dict[str, float], update: int):
+        row = {"update": update, **metrics}
+        path = self.path.replace(".csv", "_eval.csv")
+        write_header = not os.path.exists(path)
+        with open(path, "a", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if write_header:
+                w.writeheader()
+            w.writerow(row)
+
+
+class PPOCheckpoint(PPOCallback):
+    order = 30
+
+    def __init__(self, dirpath: str = "checkpoints/ppo", every_n_updates: int = 10):
+        self.dirpath = dirpath
+        self.every_n_updates = every_n_updates
+        os.makedirs(self.dirpath, exist_ok=True)
+
+    def on_update_end(self, metrics: Dict[str, float], update: int):
+        if update % self.every_n_updates != 0:
+            return
+        trainer = self.trainer.trainer
+        path = os.path.join(self.dirpath, f"update{update}.pt")
+        torch.save(
+            {
+                "policy": trainer.policy.state_dict(),
+                "value": trainer.value_fn.state_dict(),
+                "update": update,
+                "metrics": metrics,
+            },
+            path,
+        )
+        print(f"[ppo-ckpt] Saved checkpoint to {path}")

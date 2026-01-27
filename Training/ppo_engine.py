@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -126,14 +126,17 @@ class PPOTrainer:
 
         for _ in range(rollout_len):
             with torch.no_grad():
-                dist = policy(state)
-                if isinstance(dist, tuple):
-                    action, log_prob = dist[:2]
-                    entropy = dist[2] if len(dist) > 2 else torch.tensor(0.0, device=self.device)
+                if hasattr(policy, "sample"):
+                    action, log_prob, entropy = policy.sample(state)
                 else:
-                    action = dist.sample()
-                    log_prob = dist.log_prob(action)
-                    entropy = dist.entropy()
+                    dist = policy(state)
+                    if isinstance(dist, tuple):
+                        action, log_prob = dist[:2]
+                        entropy = dist[2] if len(dist) > 2 else torch.tensor(0.0, device=self.device)
+                    else:
+                        action = dist.sample()
+                        log_prob = dist.log_prob(action)
+                        entropy = dist.entropy()
                 value = value_fn(state).squeeze(-1)
 
             step_out = env.step(action.detach().cpu().numpy())
@@ -239,15 +242,18 @@ class PPOTrainer:
                 mb_advantages = advantages[mb_idx]
                 mb_returns = returns[mb_idx]
 
-                dist = self.policy(mb_states)
-                if isinstance(dist, tuple):
-                    new_actions, new_log_probs = dist[:2]
-                    entropy = dist[2] if len(dist) > 2 else torch.tensor(0.0, device=self.device)
-                    if new_actions.shape != mb_actions.shape:
-                        new_actions = mb_actions
+                if hasattr(self.policy, "log_prob"):
+                    new_log_probs, entropy = self.policy.log_prob(mb_states, mb_actions)
                 else:
-                    new_log_probs = dist.log_prob(mb_actions)
-                    entropy = dist.entropy()
+                    dist = self.policy(mb_states)
+                    if isinstance(dist, tuple):
+                        new_actions, new_log_probs = dist[:2]
+                        entropy = dist[2] if len(dist) > 2 else torch.tensor(0.0, device=self.device)
+                        if new_actions.shape != mb_actions.shape:
+                            new_actions = mb_actions
+                    else:
+                        new_log_probs = dist.log_prob(mb_actions)
+                        entropy = dist.entropy()
 
                 new_values = self.value_fn(mb_states).squeeze(-1)
 
@@ -291,3 +297,99 @@ class PPOTrainer:
             "mean_turnover": float(rollout.turnovers.mean().item()),
         }
         return metrics
+
+
+class PPOTrainingEngine:
+    def __init__(
+        self,
+        trainer: PPOTrainer,
+        callbacks: Optional[Iterable[Callable]] = None,
+    ) -> None:
+        self.trainer = trainer
+        self.callbacks = list(callbacks) if callbacks is not None else []
+        for cb in self.callbacks:
+            if hasattr(cb, "set_trainer"):
+                cb.set_trainer(self)
+
+    def _notify(self, name: str, *args, **kwargs) -> None:
+        for cb in self.callbacks:
+            handler = getattr(cb, name, None)
+            if handler is not None:
+                handler(*args, **kwargs)
+
+    def train(
+        self,
+        num_updates: int,
+        rollout_len: int,
+        update_epochs: int,
+        minibatch_size: int,
+        eval_env=None,
+        eval_episodes: int = 0,
+        eval_every: int = 0,
+    ) -> None:
+        self._notify("on_train_start")
+        for update in range(1, num_updates + 1):
+            rollout = self.trainer.collect_rollout(
+                self.trainer.env, self.trainer.policy, self.trainer.value_fn, rollout_len
+            )
+            self._notify("on_rollout_end", rollout, update)
+
+            metrics = self.trainer.update_policy(rollout, update_epochs, minibatch_size)
+            self._notify("on_update_end", metrics, update)
+
+            if eval_env is not None and eval_episodes > 0 and eval_every > 0:
+                if update % eval_every == 0:
+                    eval_metrics = self.evaluate(eval_env, eval_episodes)
+                    self._notify("on_eval_end", eval_metrics, update)
+        self._notify("on_train_end")
+
+    def evaluate(self, env, episodes: int) -> Dict[str, float]:
+        returns = []
+        lengths = []
+        for _ in range(episodes):
+            reset_out = env.reset()
+            if isinstance(reset_out, dict):
+                x_context = reset_out.get("x_context")
+                t_context = reset_out.get("t_context")
+                w_prev = reset_out.get("w_prev", 0.0)
+                wealth_feats = reset_out.get("wealth_feats", 0.0)
+            else:
+                x_context, t_context, *extras = reset_out
+                w_prev = extras[0] if len(extras) > 0 else 0.0
+                wealth_feats = extras[1] if len(extras) > 1 else 0.0
+
+            x_context = self.trainer._to_tensor(x_context)
+            t_context = self.trainer._to_tensor(t_context)
+            state = self.trainer._extract_state(x_context, t_context, w_prev, wealth_feats)
+
+            done = False
+            total_reward = 0.0
+            steps = 0
+            while not done:
+                with torch.no_grad():
+                    if hasattr(self.trainer.policy, "mean_action"):
+                        action = self.trainer.policy.mean_action(state)
+                    else:
+                        dist = self.trainer.policy(state)
+                        action = dist.mean if hasattr(dist, "mean") else dist.sample()
+                step_out = env.step(action.detach().cpu().numpy())
+                x_context, t_context, reward, done, _ = self.trainer._unpack_env_output(step_out)
+                if isinstance(step_out, dict):
+                    w_prev = step_out.get("w_prev", w_prev)
+                    wealth_feats = step_out.get("wealth_feats", wealth_feats)
+                elif len(step_out) >= 6:
+                    w_prev = step_out[4]
+                    wealth_feats = step_out[5]
+                x_context = self.trainer._to_tensor(x_context)
+                t_context = self.trainer._to_tensor(t_context)
+                state = self.trainer._extract_state(x_context, t_context, w_prev, wealth_feats)
+
+                total_reward += float(reward.item() if isinstance(reward, torch.Tensor) else reward)
+                steps += 1
+            returns.append(total_reward)
+            lengths.append(steps)
+
+        return {
+            "eval_return": float(torch.tensor(returns).mean().item()) if returns else 0.0,
+            "eval_length": float(torch.tensor(lengths).mean().item()) if lengths else 0.0,
+        }
