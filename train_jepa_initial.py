@@ -1,29 +1,33 @@
 # train.py
 import torch
 from Datasets.dataloaders import DataLoaders
-from Datasets.datasets import Dataset_Finance
+from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
 from models.jepa.jepa import JEPA  # your model that accepts a batch dict
 from models.time_series.patchTransformer import PatchTSTEncoder
-from Training.engine import Learner, PatchingCallback, StatsPrinter, CSVLogger, CheckpointCallback
+from Training.engine import Learner
+from Training.callbacks import PatchingCallback, StatsPrinter, CSVLogger, CheckpointCallback
 from Training.helpers import variance_loss
 import os
 
 MODEL_NAME = "jepa_initial"
 
 dataset_kwargs = {
-    "root_path": r"Data\binance",
-    "data_path": r"BTCUSDT_5m_1504137600000_1759190400000_klines.csv",
-    "start_date": "2020-12-31",
+    "root_path": r"Data\polygon",
+    "data_path": r"data_raw_1m",
+    "start_date": None,
+    "split": "train",
     "size": [1024, 96],  # label_len ignored by your __getitem__
-    "rolling_window": 252,
     "use_time_features": True,
-    "time_col_name": "close_time",
+    "rolling_window": 252,
     "train_split": 0.7,
     "test_split": 0.15,
+    "regular_hours_only": True,
+    "timeframe": "5min",
 }
 
+print("Loading dataset...")
 dataloaders = DataLoaders(
-    datasetCLS=Dataset_Finance,
+    datasetCLS=Dataset_Finance_MultiAsset,
     dataset_kwargs=dataset_kwargs,
     batch_size_train=64,
     batch_size_eval=256,
@@ -34,6 +38,7 @@ dataloaders = DataLoaders(
     persistent_workers=False,
     prefetch_factor=None,
 )
+print(f"Dataset loaded {len(dataloaders.train_loader())} train batches and {len(dataloaders.val_loader())} val batches")
 
 train_loader = dataloaders.train_loader()
 val_loader = dataloaders.val_loader()
@@ -90,6 +95,9 @@ if "best.pt" in os.listdir(os.path.join("checkpoints", MODEL_NAME)):
     except Exception as e:
         print(f"Failed to load model weights from checkpoints/{MODEL_NAME}/best.pt:")
 
+else:
+    print("There is no best model, starting training from zero")
+    epoch = 0
 
 
 # should accept the batch dict and use keys like "x_context" (patched by callback)
@@ -124,4 +132,4 @@ cbs = [
 learn = Learner(model=jepa_model, train_dl=train_loader, val_dl=val_loader,
                 loss_func=loss_fn, opt=opt, cbs=cbs, amp=True, grad_clip=1.0, start_epoch=epoch)
 
-learn.fit(n_epochs=20)
+learn.fit(n_epochs=50)

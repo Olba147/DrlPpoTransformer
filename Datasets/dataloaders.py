@@ -1,7 +1,9 @@
 # finance_dataloaders.py
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict, Any
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
+
+from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
 
 
 @dataclass
@@ -18,13 +20,13 @@ class LoaderConfig:
 
 class DataLoaders:
     """
-    Convenience wrapper that instantiates Dataset_Finance for train/val/test
-    and exposes ready-to-use DataLoaders.
+    Convenience wrapper that instantiates Dataset_Finance_MultiAsset for
+    train/val/test and exposes ready-to-use DataLoaders.
     """
     def __init__(
         self,
-        datasetCLS,
         dataset_kwargs: Dict[str, Any],
+        datasetCLS=Dataset_Finance_MultiAsset,
         batch_size_train: int = 64,
         batch_size_eval: int = 256,
         num_workers: int = 0,
@@ -36,16 +38,17 @@ class DataLoaders:
         ):
         """
         Args:
-            dataset_kwargs: kwargs passed to Dataset_Finance except 'split'.
+            dataset_kwargs: kwargs passed to Dataset_Finance_MultiAsset except 'split'.
                             e.g. {
                                 "root_path": "...",
-                                "data_path": "btcusdt.csv",
+                                "data_path": "polygon/data_raw_1m",
                                 "size": [512, 96],  # label_len ignored by your __getitem__
                                 "rolling_window": 256,
                                 "use_time_features": True,
-                                "time_col_name": "close_time",
+                                "time_col_name": "timestamp",
                                 "train_split": 0.7,
                                 "test_split": 0.15,
+                                "tickers": ["AAPL", "AMZN"],
                             }
             batch_size_train: int = 64,
             batch_size_eval: int = 256,

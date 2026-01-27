@@ -21,8 +21,7 @@ Thumbs.db
 secrets.json
 
 # datasets
-Data/binance/*.csv
-Data/Test/*.csv
+Data/
 
 # training artifacts
 checkpoints/
