@@ -45,6 +45,11 @@ class Callback:
     def after_backward(self): pass
     def after_step(self): pass
 
+    # PPO-specific hooks
+    def before_update(self, update_idx: int): pass
+    def after_rollout(self, update_idx: int, rollout_metrics: Dict[str, float]): pass
+    def after_update(self, update_idx: int, update_metrics: Dict[str, float]): pass
+
 
 class CallbackList:
     def __init__(self, cbs: List[Callback]):
@@ -241,3 +246,142 @@ class CheckpointCallback(Callback):
                         "epoch": self.learn.epoch}, path)
             print(f"[ckpt] Saved periodic to {path}")
 
+
+class PPOStatsPrinter(Callback):
+    """
+    Prints PPO update metrics every log_every updates.
+    """
+    order = 50
+
+    def __init__(self, log_every: int = 1):
+        self.log_every = log_every
+        self.start_time = time.time()
+        self._rollout_metrics: Dict[str, float] = {}
+
+    def before_fit(self):
+        self._rollout_metrics = {}
+
+    def after_rollout(self, update_idx: int, rollout_metrics: Dict[str, float]):
+        self._rollout_metrics = rollout_metrics or {}
+
+    def after_update(self, update_idx: int, update_metrics: Dict[str, float]):
+        if (update_idx + 1) % self.log_every != 0:
+            return
+        metrics = {**self._rollout_metrics, **(update_metrics or {})}
+        policy_loss = metrics.get("policy_loss", float("nan"))
+        value_loss = metrics.get("value_loss", float("nan"))
+        entropy = metrics.get("entropy", float("nan"))
+        approx_kl = metrics.get("approx_kl", float("nan"))
+        clip_frac = metrics.get("clip_frac", float("nan"))
+        mean_reward = metrics.get("mean_reward", float("nan"))
+        mean_turnover = metrics.get("mean_turnover", float("nan"))
+        elapsed = time.time() - self.start_time
+        print(
+            "[ppo] "
+            f"time={elapsed:.2f} update={update_idx + 1} "
+            f"policy_loss={policy_loss:.5f} value_loss={value_loss:.5f} "
+            f"entropy={entropy:.5f} approx_kl={approx_kl:.5f} "
+            f"clip_frac={clip_frac:.5f} mean_reward={mean_reward:.5f} "
+            f"mean_turnover={mean_turnover:.5f}"
+        )
+
+
+class PPOCSVLogger(Callback):
+    """
+    Saves PPO update-level metrics to CSV.
+    """
+    order = 60
+
+    def __init__(self, path: str = "logs/ppo_train_log.csv"):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self._wrote_header = False
+        self._rollout_metrics: Dict[str, float] = {}
+
+    def before_fit(self):
+        self._rollout_metrics = {}
+
+    def after_rollout(self, update_idx: int, rollout_metrics: Dict[str, float]):
+        self._rollout_metrics = rollout_metrics or {}
+
+    def after_update(self, update_idx: int, update_metrics: Dict[str, float]):
+        metrics = {**self._rollout_metrics, **(update_metrics or {})}
+        row = {
+            "update": update_idx,
+            "policy_loss": metrics.get("policy_loss"),
+            "value_loss": metrics.get("value_loss"),
+            "entropy": metrics.get("entropy"),
+            "approx_kl": metrics.get("approx_kl"),
+            "clip_frac": metrics.get("clip_frac"),
+            "mean_reward": metrics.get("mean_reward"),
+            "mean_turnover": metrics.get("mean_turnover"),
+        }
+        write_header = not os.path.exists(self.path) or (not self._wrote_header)
+        with open(self.path, "a", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if write_header:
+                w.writeheader()
+                self._wrote_header = True
+            w.writerow(row)
+
+
+class PPOCheckpointCallback(Callback):
+    """
+    Saves PPO policy/value checkpoints based on a monitor metric.
+    """
+    order = 70
+
+    def __init__(
+        self,
+        dirpath: str = "checkpoints/ppo",
+        monitor: str = "mean_reward",
+        mode: str = "max",
+        every_n_updates: Optional[int] = None,
+        filename_best: str = "best.pt",
+    ):
+        os.makedirs(dirpath, exist_ok=True)
+        self.dir = dirpath
+        self.monitor = monitor
+        self.mode = mode
+        self.every_n = every_n_updates
+        self.filename_best = filename_best
+        self.best = math.inf if mode == "min" else -math.inf
+        self._rollout_metrics: Dict[str, float] = {}
+
+    def _is_better(self, current: float) -> bool:
+        return current < self.best if self.mode == "min" else current > self.best
+
+    def after_rollout(self, update_idx: int, rollout_metrics: Dict[str, float]):
+        self._rollout_metrics = rollout_metrics or {}
+
+    def after_update(self, update_idx: int, update_metrics: Dict[str, float]):
+        metrics = {**self._rollout_metrics, **(update_metrics or {})}
+        metric = metrics.get(self.monitor)
+        if metric is None:
+            return
+
+        if self._is_better(metric):
+            self.best = metric
+            path = os.path.join(self.dir, self.filename_best)
+            torch.save(
+                {
+                    "policy": self.learn.policy.state_dict(),
+                    "value": self.learn.value.state_dict(),
+                    "update": update_idx,
+                    "monitor": metric,
+                },
+                path,
+            )
+            print(f"[ppo-ckpt] Saved best to {path} ({self.monitor}={metric:.5f})")
+
+        if self.every_n and ((update_idx + 1) % self.every_n == 0):
+            path = os.path.join(self.dir, f"update{update_idx + 1}.pt")
+            torch.save(
+                {
+                    "policy": self.learn.policy.state_dict(),
+                    "value": self.learn.value.state_dict(),
+                    "update": update_idx,
+                },
+                path,
+            )
+            print(f"[ppo-ckpt] Saved periodic to {path}")
