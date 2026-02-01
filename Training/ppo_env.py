@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
 
 
 @dataclass
@@ -102,3 +104,62 @@ class TradingEnv:
             "wealth": self.state.wealth,
         }
         return obs
+
+
+class GymTradingEnv(gym.Env):
+    metadata = {"render_modes": []}
+
+    def __init__(
+        self,
+        dataset,
+        episode_len: int = 256,
+        transaction_cost: float = 1e-3,
+        allow_short: bool = True,
+        include_wealth: bool = True,
+        seed: Optional[int] = None,
+    ) -> None:
+        super().__init__()
+        self.env = TradingEnv(
+            dataset=dataset,
+            episode_len=episode_len,
+            transaction_cost=transaction_cost,
+            allow_short=allow_short,
+            include_wealth=include_wealth,
+            seed=seed,
+        )
+
+        seq_len = dataset.seq_len
+        n_features = dataset.data_x[dataset.asset_ids[0]].shape[-1]
+        n_time_features = dataset.dates[dataset.asset_ids[0]].shape[-1]
+        wealth_dim = 1 if include_wealth else 0
+
+        self.observation_space = spaces.Dict(
+            {
+                "x_context": spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(seq_len, n_features), dtype=np.float32
+                ),
+                "t_context": spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(seq_len, n_time_features), dtype=np.float32
+                ),
+                "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
+                "wealth_feats": spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(wealth_dim,), dtype=np.float32
+                ),
+            }
+        )
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+
+    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+        if seed is not None:
+            self.env.rng = np.random.default_rng(seed)
+        obs = self.env.reset()
+        return obs, {}
+
+    def step(self, action):
+        obs = self.env.step(action)
+        reward = float(obs.pop("reward"))
+        done = bool(obs.pop("done"))
+        info = obs.pop("info", {})
+        terminated = done
+        truncated = False
+        return obs, reward, terminated, truncated, info

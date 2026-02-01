@@ -81,7 +81,6 @@ The environment uses the `Dataset_Finance_MultiAsset` data (normalized features 
 
 PPO training is orchestrated by:
 
-- `Training/ppo_engine.py`: `PPOTrainer` collects rollouts, computes GAE advantages, and updates policy/value networks using PPO clipping; `PPOTrainingEngine` handles update loops and optional evaluation.
 - `Training/callbacks.py`: `PPOStatsPrinter`, `PPOCSVLogger`, and `PPOCheckpoint` provide logging and checkpointing.
 - `train_PPO_initial.py`: sets up the datasets/environments, loads the pretrained JEPA encoder (frozen), and runs PPO training.
 

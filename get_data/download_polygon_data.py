@@ -6,7 +6,7 @@ from polygon import RESTClient
 
 # ---------------- CONFIGURATION ----------------
 try:
-    with open(r"../secrets.json", "r") as f:
+    with open(r"secrets.json", "r") as f:
         secrets = json.load(f)
         polygon_API_KEY = secrets["POLYGON_API_KEY"]
 except Exception:
@@ -19,7 +19,7 @@ END_DATE = "2026-01-25"
 TIMEFRAME = "minute" # 1 minute bars
 MULTIPLIER = 1
 
-# Current Dow 30 + Major ETFs
+# Current Dow 30 + 4 Major ETFs
 TICKERS = [
     "MMM", "AXP", "AMGN", "AMZN", "AAPL", "BA", "CAT", "CVX", "CSCO", "KO",
     "DIS", "GS", "HD", "HON", "IBM", "JNJ", "JPM", "MCD", "MRK", "MSFT",
@@ -27,7 +27,7 @@ TICKERS = [
     "DIA", "SPY", "QQQ" 
 ]
 
-OUTPUT_DIR = r"polygon/data_raw_1m"
+OUTPUT_DIR = r"../Data/polygon/data_raw_1m"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 # -----------------------------------------------
 
