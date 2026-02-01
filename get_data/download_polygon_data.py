@@ -27,7 +27,7 @@ TICKERS = [
     "DIA", "SPY", "QQQ" 
 ]
 
-OUTPUT_DIR = r"../Data/polygon/data_raw_1m"
+OUTPUT_DIR = r"Data/polygon/data_raw_1m"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 # -----------------------------------------------
 
