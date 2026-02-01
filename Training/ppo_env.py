@@ -22,7 +22,7 @@ class TradingEnv:
         self,
         dataset,
         episode_len: int = 256,
-        transaction_cost: float = 1e-3,
+        transaction_cost: float = 1e-4, # only for training, should be tested with 1e-3
         allow_short: bool = True,
         include_wealth: bool = True,
         seed: Optional[int] = None,
@@ -80,11 +80,11 @@ class TradingEnv:
         cursor = self.state.cursor
         close_t = self._get_close(asset_id, cursor + self.seq_len - 1)
         close_tp1 = self._get_close(asset_id, cursor + self.seq_len)
-        r_tp1 = close_tp1 / close_t - 1.0
+        r_tp1 = float(np.log(close_tp1 / close_t))
 
         turnover = abs(w_t - self.state.w_prev)
         reward = w_t * r_tp1 - self.transaction_cost * turnover
-        self.state.wealth *= 1.0 + reward
+        self.state.wealth *= float(np.exp(reward))
 
         self.state.cursor += 1
         self.state.step += 1
