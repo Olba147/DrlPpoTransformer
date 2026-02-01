@@ -38,7 +38,7 @@ EVAL_EVERY_STEPS = 50_000
 CHECKPOINT_EVERY_STEPS = 50_000
 
 dataset_kwargs = {
-    "root_path": r"Data\polygon",
+    "root_path": r"Data/polygon",
     "data_path": r"data_raw_1m",
     "start_date": None,
     "split": "train",
