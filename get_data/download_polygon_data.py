@@ -9,6 +9,7 @@ try:
     with open(r"secrets.json", "r") as f:
         secrets = json.load(f)
         polygon_API_KEY = secrets["POLYGON_API_KEY"]
+        print(os.getcwd())
 except Exception:
     print("failed to read secrets.json, please create it")
     exit
