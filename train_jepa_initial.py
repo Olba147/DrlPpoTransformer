@@ -42,11 +42,11 @@ EMA_END = 0.999
 EMA_EPOCHS = 20
 
 dataset_kwargs = {
-    "root_path": r"Data\polygon",
+    "root_path": r"Data/polygon",
     "data_path": r"data_raw_1m",
     "start_date": None,
     "split": "train",
-    "size": [1024, 96],  # label_len ignored by your __getitem__
+    "size": [1024, 48],  # label_len ignored by your __getitem__
     "use_time_features": True,
     "rolling_window": 252,
     "train_split": 0.7,
