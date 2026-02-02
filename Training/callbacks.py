@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn import functional as F
 import time
+from stable_baselines3.common.callbacks import BaseCallback
 
 # ----------------------------
 # Minimal callback primitives
@@ -349,3 +350,36 @@ class PPOCheckpoint(PPOCallback):
             path,
         )
         print(f"[ppo-ckpt] Saved checkpoint to {path}")
+
+
+class CustomTensorboardCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super().__init__(verbose=verbose)
+
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos")
+        if not infos:
+            return True
+
+        turnovers = []
+        returns = []
+        wealths = []
+
+        for info in infos:
+            if not info:
+                continue
+            if "turnover" in info:
+                turnovers.append(info["turnover"])
+            if "return" in info:
+                returns.append(info["return"])
+            if "wealth" in info:
+                wealths.append(info["wealth"])
+
+        if turnovers:
+            self.logger.record("custom/turnover_mean", float(np.mean(turnovers)))
+        if returns:
+            self.logger.record("custom/return_mean", float(np.mean(returns)))
+        if wealths:
+            self.logger.record("custom/wealth_mean", float(np.mean(wealths)))
+
+        return True

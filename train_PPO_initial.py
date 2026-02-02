@@ -1,8 +1,9 @@
 import os
+import numpy as np
 import torch
 
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
@@ -10,26 +11,27 @@ from Training.ppo_env import GymTradingEnv
 from Training.sb3_jepa import JEPAFeatureExtractor
 from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
+from Training.callbacks import CustomTensorboardCallback
 
-MODEL_NAME = "ppo_initial"
+MODEL_NAME = "ppo_initial2"
 JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial"
 
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
 EPISODE_LENGTH_STEPS = 2340
-ROLLOUT_LENGTH_STEPS = 2048
+ROLLOUT_LENGTH_STEPS = 1024
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 4
 
-LEARNING_RATE = 5e-5
-PPO_EPOCHS = 8
-BATCH_SIZE = 1024
+LEARNING_RATE = 5e-4
+PPO_EPOCHS = 4
+BATCH_SIZE = 512
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
 
-ENT_COEF = 0.02
+ENT_COEF = 0.05
 VF_COEF = 0.5
 MAX_GRAD_NORM = 0.5
 TARGET_KL = 0.02
@@ -37,6 +39,8 @@ TARGET_KL = 0.02
 EVAL_EPISODES = 10
 EVAL_EVERY_STEPS = 10_000
 CHECKPOINT_EVERY_STEPS = 50_000
+
+TRANSACTION_COST = 1e-5 # only for initial training to support exploration
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
@@ -56,10 +60,9 @@ def make_env(dataset, episode_len):
     return lambda: GymTradingEnv(
         dataset,
         episode_len=episode_len,
-        transaction_cost=1e-3,
+        transaction_cost=TRANSACTION_COST,
         allow_short=True,
     )
-
 
 def main():
     print("Loading datasets...")
@@ -154,6 +157,7 @@ def main():
     )
 
     callbacks = [
+        CustomTensorboardCallback(),
         CheckpointCallback(
             save_freq=CHECKPOINT_EVERY_STEPS,
             save_path=f"checkpoints/{MODEL_NAME}",
