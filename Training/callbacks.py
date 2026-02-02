@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from torch.nn import functional as F
 import time
 from stable_baselines3.common.callbacks import BaseCallback
+import numpy as np
 
 # ----------------------------
 # Minimal callback primitives
