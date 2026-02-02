@@ -15,7 +15,7 @@ MODEL_NAME = "jepa_initial2"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-TRAIN_EPOCHS = 50
+TRAIN_EPOCHS = 100
 TRAIN_BATCH_SIZE = 64
 EVAL_BATCH_SIZE = 256
 LEARNING_RATE = 3e-4
