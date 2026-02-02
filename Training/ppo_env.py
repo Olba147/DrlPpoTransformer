@@ -55,13 +55,14 @@ class TradingEnv:
     def _observe(self, asset_id: str, cursor: int, w_prev: float, wealth: float) -> Dict:
         x_context = self.dataset.data_x[asset_id][cursor : cursor + self.seq_len]
         t_context = self.dataset.dates[asset_id][cursor : cursor + self.seq_len]
-        wealth_feats = np.array([np.log(wealth)], dtype=np.float32) if self.include_wealth else np.array([], dtype=np.float32)
-        return {
+        obs = {
             "x_context": x_context.astype(np.float32),
             "t_context": t_context.astype(np.float32),
             "w_prev": np.array([w_prev], dtype=np.float32),
-            "wealth_feats": wealth_feats,
         }
+        if self.include_wealth:
+            obs["wealth_feats"] = np.array([np.log(wealth)], dtype=np.float32)
+        return obs
 
     def reset(self) -> Dict:
         asset_id, start = self._sample_start()
@@ -133,22 +134,21 @@ class GymTradingEnv(gym.Env):
         seq_len = dataset.seq_len
         n_features = dataset.data_x[dataset.asset_ids[0]].shape[-1]
         n_time_features = dataset.dates[dataset.asset_ids[0]].shape[-1]
-        wealth_dim = 1 if include_wealth else 0
+        obs_spaces = {
+            "x_context": spaces.Box(
+                low=-np.inf, high=np.inf, shape=(seq_len, n_features), dtype=np.float32
+            ),
+            "t_context": spaces.Box(
+                low=-np.inf, high=np.inf, shape=(seq_len, n_time_features), dtype=np.float32
+            ),
+            "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
+        }
+        if include_wealth:
+            obs_spaces["wealth_feats"] = spaces.Box(
+                low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32
+            )
 
-        self.observation_space = spaces.Dict(
-            {
-                "x_context": spaces.Box(
-                    low=-np.inf, high=np.inf, shape=(seq_len, n_features), dtype=np.float32
-                ),
-                "t_context": spaces.Box(
-                    low=-np.inf, high=np.inf, shape=(seq_len, n_time_features), dtype=np.float32
-                ),
-                "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
-                "wealth_feats": spaces.Box(
-                    low=-np.inf, high=np.inf, shape=(wealth_dim,), dtype=np.float32
-                ),
-            }
-        )
+        self.observation_space = spaces.Dict(obs_spaces)
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
