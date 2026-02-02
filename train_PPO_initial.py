@@ -24,12 +24,12 @@ ROLLOUT_LENGTH_STEPS = 1024
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 4
 
-LEARNING_RATE = 5e-4
-PPO_EPOCHS = 4
+LEARNING_RATE = 5e-5
+PPO_EPOCHS = 8
 BATCH_SIZE = 512
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
-CLIP_RANGE = 0.2
+CLIP_RANGE = 0.15
 
 ENT_COEF = 0.05
 VF_COEF = 0.5
@@ -41,6 +41,7 @@ EVAL_EVERY_STEPS = 10_000
 CHECKPOINT_EVERY_STEPS = 50_000
 
 TRANSACTION_COST = 1e-5 # only for initial training to support exploration
+INCLUDE_WEALTH = False
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
@@ -62,6 +63,7 @@ def make_env(dataset, episode_len):
         episode_len=episode_len,
         transaction_cost=TRANSACTION_COST,
         allow_short=True,
+        include_wealth=INCLUDE_WEALTH,
     )
 
 def main():

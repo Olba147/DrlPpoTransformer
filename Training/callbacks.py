@@ -363,6 +363,7 @@ class CustomTensorboardCallback(BaseCallback):
             return True
 
         turnovers = []
+        positions = []
         returns = []
         wealths = []
 
@@ -371,6 +372,8 @@ class CustomTensorboardCallback(BaseCallback):
                 continue
             if "turnover" in info:
                 turnovers.append(info["turnover"])
+            if "position" in info:
+                positions.append(abs(info["position"]))
             if "return" in info:
                 returns.append(info["return"])
             if "wealth" in info:
@@ -378,6 +381,8 @@ class CustomTensorboardCallback(BaseCallback):
 
         if turnovers:
             self.logger.record("custom/turnover_mean", float(np.mean(turnovers)))
+        if positions:
+            self.logger.record("custom/position_abs_mean", float(np.mean(positions)))
         if returns:
             self.logger.record("custom/return_mean", float(np.mean(returns)))
         if wealths:

@@ -83,7 +83,8 @@ class TradingEnv:
         r_tp1 = float(np.log(close_tp1 / close_t))
 
         turnover = abs(w_t - self.state.w_prev)
-        reward = w_t * r_tp1 - self.transaction_cost * turnover
+        cost = self.transaction_cost * turnover
+        reward = (w_t - 1.0) * r_tp1 - cost
         self.state.wealth *= float(np.exp(reward))
 
         self.state.cursor += 1
@@ -99,6 +100,7 @@ class TradingEnv:
         obs["reward"] = np.array(reward, dtype=np.float32)
         obs["done"] = np.array(done, dtype=np.float32)
         obs["info"] = {
+            "position": w_t,
             "turnover": turnover,
             "return": r_tp1,
             "wealth": self.state.wealth,
