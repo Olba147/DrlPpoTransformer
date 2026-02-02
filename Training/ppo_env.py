@@ -22,7 +22,7 @@ class TradingEnv:
         self,
         dataset,
         episode_len: int = 256,
-        transaction_cost: float = 1e-4, # only for training, should be tested with 1e-3
+        transaction_cost: float = 1e-3,
         allow_short: bool = True,
         include_wealth: bool = True,
         seed: Optional[int] = None,
