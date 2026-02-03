@@ -72,7 +72,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
     def _patch(self, x: th.Tensor) -> th.Tensor:
         return make_patches(x, self.patch_len, self.patch_stride)
 
-    def forward(self, observations: Dict[str, th.Tensor]) -> th.Tensor:
+    def compute_jepa_aux(self, observations: Dict[str, th.Tensor]) -> tuple[Optional[th.Tensor], Optional[float], Optional[float]]:
         x_context = self._ensure_batched(observations["x_context"])
         t_context = self._ensure_batched(observations["t_context"])
 
@@ -86,21 +86,29 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
             x_context = x_ctx_split
             t_context = t_ctx_split
 
-        # Patched inputs for JEPA loss
         if x_context.shape[1] < self.patch_len or x_target.shape[1] < self.patch_len:
             self.last_jepa_loss = None
             self.last_pred_std = None
             self.last_tgt_std = None
-        else:
-            x_ctx_p = self._patch(x_context)
-            t_ctx_p = self._patch(t_context)
-            x_tgt_p = self._patch(x_target)
-            t_tgt_p = self._patch(t_target)
+            return None, None, None
 
-            p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p)
-            self.last_jepa_loss = F.mse_loss(p_c, z_t)
-            self.last_pred_std = float(p_c.std(dim=-1).mean().detach().cpu().item())
-            self.last_tgt_std = float(z_t.std(dim=-1).mean().detach().cpu().item())
+        x_ctx_p = self._patch(x_context)
+        t_ctx_p = self._patch(t_context)
+        x_tgt_p = self._patch(x_target)
+        t_tgt_p = self._patch(t_target)
+
+        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p)
+        loss = F.mse_loss(p_c, z_t)
+        pred_std = float(p_c.std(dim=-1).mean().detach().cpu().item())
+        tgt_std = float(z_t.std(dim=-1).mean().detach().cpu().item())
+        self.last_jepa_loss = loss
+        self.last_pred_std = pred_std
+        self.last_tgt_std = tgt_std
+        return loss, pred_std, tgt_std
+
+    def forward(self, observations: Dict[str, th.Tensor]) -> th.Tensor:
+        x_context = self._ensure_batched(observations["x_context"])
+        t_context = self._ensure_batched(observations["t_context"])
 
         # Features for PPO: use full context embedding
         x_full = self._ensure_batched(observations["x_context"])
@@ -266,12 +274,12 @@ class PPOWithJEPA(PPO):
 
                 jepa_loss = None
                 if self.update_jepa and hasattr(self.policy, "features_extractor"):
-                    jepa_loss = getattr(self.policy.features_extractor, "last_jepa_loss", None)
-                    if jepa_loss is not None:
-                        loss = loss + self.jepa_coef * jepa_loss
-                        jepa_losses.append(jepa_loss.item())
-                        pred_std = getattr(self.policy.features_extractor, "last_pred_std", None)
-                        tgt_std = getattr(self.policy.features_extractor, "last_tgt_std", None)
+                    fx = self.policy.features_extractor
+                    if hasattr(fx, "compute_jepa_aux"):
+                        jepa_loss, pred_std, tgt_std = fx.compute_jepa_aux(rollout_data.observations)
+                        if jepa_loss is not None:
+                            loss = loss + self.jepa_coef * jepa_loss
+                            jepa_losses.append(jepa_loss.item())
                         if pred_std is not None:
                             jepa_pred_stds.append(pred_std)
                         if tgt_std is not None:
