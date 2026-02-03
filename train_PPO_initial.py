@@ -172,6 +172,40 @@ def main():
         tensorboard_log="logs",
     )
 
+    class JEPACheckpoint(BaseCallback):
+        def __init__(self, jepa_model: JEPA, save_dir: str, every_n_steps: int):
+            super().__init__()
+            self.jepa_model = jepa_model
+            self.save_dir = save_dir
+            self.every_n_steps = every_n_steps
+
+        def _on_step(self) -> bool:
+            if self.n_calls % self.every_n_steps != 0:
+                return True
+            os.makedirs(self.save_dir, exist_ok=True)
+            path = os.path.join(self.save_dir, f"jepa_step_{self.n_calls}.pt")
+            torch.save({"model": self.jepa_model.state_dict(), "step": self.n_calls}, path)
+            return True
+
+    class JEPABestSync(BaseCallback):
+        def __init__(self, jepa_model: JEPA, ppo_best_path: str, save_dir: str):
+            super().__init__()
+            self.jepa_model = jepa_model
+            self.ppo_best_path = ppo_best_path
+            self.save_dir = save_dir
+            self._last_mtime = None
+
+        def _on_step(self) -> bool:
+            if not os.path.exists(self.ppo_best_path):
+                return True
+            mtime = os.path.getmtime(self.ppo_best_path)
+            if self._last_mtime is None or mtime > self._last_mtime:
+                os.makedirs(self.save_dir, exist_ok=True)
+                path = os.path.join(self.save_dir, "best_jepa_ppo.pt")
+                torch.save({"model": self.jepa_model.state_dict(), "step": self.n_calls}, path)
+                self._last_mtime = mtime
+            return True
+
     callbacks = [
         CustomTensorboardCallback(),
         EntropyScheduleCallback(
@@ -192,6 +226,16 @@ def main():
             eval_freq=EVAL_EVERY_STEPS,
             n_eval_episodes=EVAL_EPISODES,
             deterministic=True,
+        ),
+        JEPACheckpoint(
+            jepa_model=jepa_model,
+            save_dir=f"checkpoints/{MODEL_NAME}",
+            every_n_steps=CHECKPOINT_EVERY_STEPS,
+        ),
+        JEPABestSync(
+            jepa_model=jepa_model,
+            ppo_best_path=f"checkpoints/{MODEL_NAME}/best_model.zip",
+            save_dir=f"checkpoints/{MODEL_NAME}",
         ),
     ]
 
