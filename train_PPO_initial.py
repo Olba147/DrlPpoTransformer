@@ -2,19 +2,24 @@ import os
 import numpy as np
 import torch
 
-from stable_baselines3 import PPO
+# import jepa params
+from train_jepa_initial import DATASET_CONTEXT_LEN, DATASET_TARGET_LEN
+from train_jepa_initial import PATCH_LEN, PATCH_STRIDE, JEPA_D_MODEL, JEPA_N_FEATURES, JEPA_N_TIME_FEATURES, JEPA_NHEAD, JEPA_NUM_LAYERS
+from train_jepa_initial import JEPA_DIM_FF, JEPA_DROPOUT, JEPA_POOLING, JEPA_PRED_LEN
+from train_jepa_initial import EMA_START, EMA_END, EMA_EPOCHS
+
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
 from Training.ppo_env import GymTradingEnv
-from Training.sb3_jepa import JEPAFeatureExtractor
+from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
 from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
-from Training.callbacks import CustomTensorboardCallback
+from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback
 
 MODEL_NAME = "ppo_initial2"
-JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial"
+JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial2"
 
 # ------------------------
 # Hyperparameters (edit here)
@@ -31,12 +36,17 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.15
 
-ENT_COEF = 0.05
+ENT_COEF_START = 0.05
+ENT_COEF_END = 0.01
+ENT_WARMUP_FRACTION = 0.2
+
 VF_COEF = 0.5
 MAX_GRAD_NORM = 0.5
 TARGET_KL = 0.02
+UPDATE_JEPA = True
+JEPA_LOSS_COEF = 1.0
 
-EVAL_EPISODES = 10
+EVAL_EPISODES = 2
 EVAL_EVERY_STEPS = 10_000
 CHECKPOINT_EVERY_STEPS = 50_000
 
@@ -48,7 +58,7 @@ dataset_kwargs = {
     "data_path": r"data_raw_1m",
     "start_date": None,
     "split": "train",
-    "size": [1024, 96],
+    "size": [1024, 48],
     "use_time_features": True,
     "rolling_window": 252,
     "train_split": 0.7,
@@ -77,40 +87,40 @@ def main():
 
     print("Loading JEPA encoder...")
     jepa_context_encoder = PatchTSTEncoder(
-        patch_len=16,
-        d_model=256,
-        n_features=9,
-        n_time_features=2,
-        nhead=4,
-        num_layers=3,
-        dim_ff=512,
-        dropout=0.1,
+        patch_len=PATCH_LEN,
+        d_model=JEPA_D_MODEL,
+        n_features=JEPA_N_FEATURES,
+        n_time_features=JEPA_N_TIME_FEATURES,
+        nhead=JEPA_NHEAD,
+        num_layers=JEPA_NUM_LAYERS,
+        dim_ff=JEPA_DIM_FF,
+        dropout=JEPA_DROPOUT,
         add_cls=True,
-        pooling="mean",
-        pred_len=96,
+        pooling=JEPA_POOLING,
+        pred_len=JEPA_PRED_LEN,
     )
 
     jepa_target_encoder = PatchTSTEncoder(
-        patch_len=16,
-        d_model=256,
-        n_features=9,
-        n_time_features=2,
-        nhead=4,
-        num_layers=3,
-        dim_ff=512,
-        dropout=0.1,
+        patch_len=PATCH_LEN,
+        d_model=JEPA_D_MODEL,
+        n_features=JEPA_N_FEATURES,
+        n_time_features=JEPA_N_TIME_FEATURES,
+        nhead=JEPA_NHEAD,
+        num_layers=JEPA_NUM_LAYERS,
+        dim_ff=JEPA_DIM_FF,
+        dropout=JEPA_DROPOUT,
         add_cls=True,
-        pooling="mean",
-        pred_len=96,
+        pooling=JEPA_POOLING,
+        pred_len=JEPA_PRED_LEN,
     )
 
     jepa_model = JEPA(
         jepa_context_encoder,
         jepa_target_encoder,
-        d_model=256,
-        ema_start=0.99,
-        ema_end=0.999,
-        n_epochs=20,
+        d_model=JEPA_D_MODEL,
+        ema_start=EMA_START,
+        ema_end=EMA_END,
+        n_epochs=EMA_EPOCHS,
     )
 
     checkpoint_path = os.path.join(JEPA_CHECKPOINT_DIR, "best.pt")
@@ -121,24 +131,26 @@ def main():
     else:
         print("No JEPA checkpoint found, using randomly initialized encoder.")
 
-    jepa_encoder = jepa_model.context_enc
-    for param in jepa_encoder.parameters():
-        param.requires_grad = False
-    jepa_encoder.eval()
+    if not UPDATE_JEPA:
+        for param in jepa_model.parameters():
+            param.requires_grad = False
+        jepa_model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     policy_kwargs = dict(
-        features_extractor_class=JEPAFeatureExtractor,
+        features_extractor_class=JEPAAuxFeatureExtractor,
         features_extractor_kwargs=dict(
-            jepa_encoder=jepa_encoder,
-            embedding_dim=256,
-            patch_len=16,
-            patch_stride=16,
+            jepa_model=jepa_model,
+            embedding_dim=JEPA_D_MODEL,
+            patch_len=PATCH_LEN,
+            patch_stride=PATCH_STRIDE,
+            use_obs_targets=True,
+            target_len=DATASET_TARGET_LEN,
         ),
         net_arch=dict(pi=[256, 256], vf=[256, 256]),
     )
 
-    model = PPO(
+    model = PPOWithJEPA(
         policy="MultiInputPolicy",
         env=train_env,
         learning_rate=LEARNING_RATE,
@@ -148,10 +160,12 @@ def main():
         gamma=GAMMA,
         gae_lambda=GAE_LAMBDA,
         clip_range=CLIP_RANGE,
-        ent_coef=ENT_COEF,
+        ent_coef=ENT_COEF_START,
         vf_coef=VF_COEF,
         max_grad_norm=MAX_GRAD_NORM,
         target_kl=TARGET_KL,
+        update_jepa=UPDATE_JEPA,
+        jepa_coef=JEPA_LOSS_COEF,
         policy_kwargs=policy_kwargs,
         device=device,
         verbose=1,
@@ -160,6 +174,12 @@ def main():
 
     callbacks = [
         CustomTensorboardCallback(),
+        EntropyScheduleCallback(
+            total_timesteps=TOTAL_TIMESTEPS,
+            warmup_fraction=ENT_WARMUP_FRACTION,
+            ent_coef_start=ENT_COEF_START,
+            ent_coef_end=ENT_COEF_END,
+        ),
         CheckpointCallback(
             save_freq=CHECKPOINT_EVERY_STEPS,
             save_path=f"checkpoints/{MODEL_NAME}",

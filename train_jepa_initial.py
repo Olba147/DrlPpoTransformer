@@ -15,6 +15,9 @@ MODEL_NAME = "jepa_initial2"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
+DATASET_CONTEXT_LEN = 1048
+DATASET_TARGET_LEN = 48
+
 TRAIN_EPOCHS = 100
 TRAIN_BATCH_SIZE = 64
 EVAL_BATCH_SIZE = 256
@@ -46,7 +49,7 @@ dataset_kwargs = {
     "data_path": r"data_raw_1m",
     "start_date": None,
     "split": "train",
-    "size": [1024, 48],  # label_len ignored by your __getitem__
+    "size": [DATASET_CONTEXT_LEN, DATASET_TARGET_LEN],  # label_len ignored by your __getitem__
     "use_time_features": True,
     "rolling_window": 252,
     "train_split": 0.7,

@@ -55,9 +55,17 @@ class TradingEnv:
     def _observe(self, asset_id: str, cursor: int, w_prev: float, wealth: float) -> Dict:
         x_context = self.dataset.data_x[asset_id][cursor : cursor + self.seq_len]
         t_context = self.dataset.dates[asset_id][cursor : cursor + self.seq_len]
+        x_target = self.dataset.data_x[asset_id][
+            cursor + self.seq_len : cursor + self.seq_len + self.dataset.pred_len
+        ]
+        t_target = self.dataset.dates[asset_id][
+            cursor + self.seq_len : cursor + self.seq_len + self.dataset.pred_len
+        ]
         obs = {
             "x_context": x_context.astype(np.float32),
             "t_context": t_context.astype(np.float32),
+            "x_target": x_target.astype(np.float32),
+            "t_target": t_target.astype(np.float32),
             "w_prev": np.array([w_prev], dtype=np.float32),
         }
         if self.include_wealth:
@@ -84,8 +92,7 @@ class TradingEnv:
         r_tp1 = float(np.log(close_tp1 / close_t))
 
         turnover = abs(w_t - self.state.w_prev)
-        cost = self.transaction_cost * turnover
-        reward = (w_t - 1.0) * r_tp1 - cost
+        reward = w_t * r_tp1 - self.transaction_cost * turnover
         self.state.wealth *= float(np.exp(reward))
 
         self.state.cursor += 1
@@ -132,6 +139,7 @@ class GymTradingEnv(gym.Env):
         )
 
         seq_len = dataset.seq_len
+        pred_len = dataset.pred_len
         n_features = dataset.data_x[dataset.asset_ids[0]].shape[-1]
         n_time_features = dataset.dates[dataset.asset_ids[0]].shape[-1]
         obs_spaces = {
@@ -140,6 +148,12 @@ class GymTradingEnv(gym.Env):
             ),
             "t_context": spaces.Box(
                 low=-np.inf, high=np.inf, shape=(seq_len, n_time_features), dtype=np.float32
+            ),
+            "x_target": spaces.Box(
+                low=-np.inf, high=np.inf, shape=(pred_len, n_features), dtype=np.float32
+            ),
+            "t_target": spaces.Box(
+                low=-np.inf, high=np.inf, shape=(pred_len, n_time_features), dtype=np.float32
             ),
             "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
         }

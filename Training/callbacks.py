@@ -389,3 +389,23 @@ class CustomTensorboardCallback(BaseCallback):
             self.logger.record("custom/wealth_mean", float(np.mean(wealths)))
 
         return True
+
+
+class EntropyScheduleCallback(BaseCallback):
+    def __init__(self, total_timesteps: int, warmup_fraction: float, ent_coef_start: float, ent_coef_end: float, verbose=0):
+        super().__init__(verbose=verbose)
+        self.total_timesteps = max(1, int(total_timesteps))
+        self.warmup_fraction = float(warmup_fraction)
+        self.ent_coef_start = float(ent_coef_start)
+        self.ent_coef_end = float(ent_coef_end)
+
+    def _on_step(self) -> bool:
+        progress = self.num_timesteps / self.total_timesteps
+        if progress < self.warmup_fraction:
+            ent_coef = self.ent_coef_start
+        else:
+            ent_coef = self.ent_coef_end
+
+        self.model.ent_coef = ent_coef
+        self.logger.record("custom/ent_coef", float(ent_coef))
+        return True
