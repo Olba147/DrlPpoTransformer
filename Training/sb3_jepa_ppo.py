@@ -50,6 +50,8 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
             param.requires_grad = False
 
         self.last_jepa_loss: Optional[th.Tensor] = None
+        self.last_pred_std: Optional[float] = None
+        self.last_tgt_std: Optional[float] = None
 
     def _ensure_batched(self, x: th.Tensor) -> th.Tensor:
         if x.dim() == 2:
@@ -87,6 +89,8 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         # Patched inputs for JEPA loss
         if x_context.shape[1] < self.patch_len or x_target.shape[1] < self.patch_len:
             self.last_jepa_loss = None
+            self.last_pred_std = None
+            self.last_tgt_std = None
         else:
             x_ctx_p = self._patch(x_context)
             t_ctx_p = self._patch(t_context)
@@ -95,6 +99,8 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
 
             p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p)
             self.last_jepa_loss = F.mse_loss(p_c, z_t)
+            self.last_pred_std = float(p_c.std(dim=-1).mean().detach().cpu().item())
+            self.last_tgt_std = float(z_t.std(dim=-1).mean().detach().cpu().item())
 
         # Features for PPO: use full context embedding
         x_full = self._ensure_batched(observations["x_context"])
@@ -199,6 +205,8 @@ class PPOWithJEPA(PPO):
         pg_losses, value_losses = [], []
         clip_fractions = []
         jepa_losses = []
+        jepa_pred_stds = []
+        jepa_tgt_stds = []
         continue_training = True
 
         # train for n_epochs epochs
@@ -262,6 +270,12 @@ class PPOWithJEPA(PPO):
                     if jepa_loss is not None:
                         loss = loss + self.jepa_coef * jepa_loss
                         jepa_losses.append(jepa_loss.item())
+                        pred_std = getattr(self.policy.features_extractor, "last_pred_std", None)
+                        tgt_std = getattr(self.policy.features_extractor, "last_tgt_std", None)
+                        if pred_std is not None:
+                            jepa_pred_stds.append(pred_std)
+                        if tgt_std is not None:
+                            jepa_tgt_stds.append(tgt_std)
 
                 # Calculate approximate form of reverse KL Divergence for early stopping
                 # see issue #417: https://github.com/DLR-RM/stable-baselines3/issues/417
@@ -305,6 +319,10 @@ class PPOWithJEPA(PPO):
         self.logger.record("train/explained_variance", explained_var)
         if jepa_losses:
             self.logger.record("train/jepa_loss", np.mean(jepa_losses))
+        if jepa_pred_stds:
+            self.logger.record("train/jepa_pred_std", np.mean(jepa_pred_stds))
+        if jepa_tgt_stds:
+            self.logger.record("train/jepa_tgt_std", np.mean(jepa_tgt_stds))
         if hasattr(self.policy, "log_std"):
             self.logger.record("train/std", th.exp(self.policy.log_std).mean().item())
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
