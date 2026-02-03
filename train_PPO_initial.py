@@ -118,7 +118,7 @@ def main():
         jepa_context_encoder,
         jepa_target_encoder,
         d_model=JEPA_D_MODEL,
-        ema_start=EMA_START,
+        ema_start=EMA_END,
         ema_end=EMA_END,
         n_epochs=EMA_EPOCHS,
     )

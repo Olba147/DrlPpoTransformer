@@ -33,6 +33,7 @@ class TradingEnv:
         self.allow_short = allow_short
         self.include_wealth = include_wealth
         self.seq_len = dataset.seq_len
+        self.pred_len = dataset.pred_len
         self.rng = np.random.default_rng(seed)
 
         if not getattr(dataset, "asset_ids", []):
@@ -43,7 +44,7 @@ class TradingEnv:
     def _sample_start(self) -> Tuple[str, int]:
         asset_id = self.rng.choice(self.dataset.asset_ids)
         data_len = len(self.dataset.data_x[asset_id])
-        max_start = data_len - self.seq_len - self.episode_len - 1
+        max_start = data_len - self.seq_len - self.pred_len - self.episode_len
         if max_start <= 0:
             max_start = max(0, data_len - self.seq_len - 2)
         start = int(self.rng.integers(0, max_start + 1))
@@ -101,7 +102,7 @@ class TradingEnv:
 
         done = (
             self.state.step >= self.episode_len
-            or (self.state.cursor + self.seq_len + 1) >= len(self.dataset.data_x[asset_id])
+            or (self.state.cursor + self.seq_len + self.pred_len) >= len(self.dataset.data_x[asset_id])
         )
 
         obs = self._observe(asset_id, self.state.cursor, self.state.w_prev, self.state.wealth)
