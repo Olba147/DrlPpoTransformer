@@ -19,7 +19,7 @@ from models.time_series.patchTransformer import PatchTSTEncoder
 from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback
 
 MODEL_NAME = "jepa_ppo3_emptry_start"
-JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial2"
+JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial3"
 
 # ------------------------
 # Hyperparameters (edit here)
