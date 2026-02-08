@@ -221,6 +221,9 @@ class PPOWithJEPA(PPO):
         jepa_losses = []
         jepa_pred_stds = []
         jepa_tgt_stds = []
+        weighted_entropy_losses = []
+        weighted_value_losses = []
+        weighted_jepa_losses = []
         continue_training = True
 
         # train for n_epochs epochs
@@ -266,6 +269,7 @@ class PPOWithJEPA(PPO):
                 # Value loss using the TD(gae_lambda) target
                 value_loss = F.mse_loss(rollout_data.returns, values_pred)
                 value_losses.append(value_loss.item())
+                weighted_value_losses.append((self.vf_coef * value_loss).item())
 
                 # Entropy loss favor exploration
                 if entropy is None:
@@ -275,6 +279,7 @@ class PPOWithJEPA(PPO):
                     entropy_loss = -th.mean(entropy)
 
                 entropy_losses.append(entropy_loss.item())
+                weighted_entropy_losses.append((self.ent_coef * entropy_loss).item())
 
                 loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
@@ -289,6 +294,7 @@ class PPOWithJEPA(PPO):
                         if jepa_loss is not None:
                             loss = loss + self.jepa_coef * jepa_loss
                             jepa_losses.append(jepa_loss.item())
+                            weighted_jepa_losses.append((self.jepa_coef * jepa_loss).item())
                         if pred_std is not None:
                             jepa_pred_stds.append(pred_std)
                         if tgt_std is not None:
@@ -328,14 +334,20 @@ class PPOWithJEPA(PPO):
 
         # Logs
         self.logger.record("train/entropy_loss", np.mean(entropy_losses))
+        if weighted_entropy_losses:
+            self.logger.record("train/weighted_entropy_loss", np.mean(weighted_entropy_losses))
         self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
         self.logger.record("train/value_loss", np.mean(value_losses))
+        if weighted_value_losses:
+            self.logger.record("train/weighted_value_loss", np.mean(weighted_value_losses))
         self.logger.record("train/approx_kl", np.mean(approx_kl_divs))
         self.logger.record("train/clip_fraction", np.mean(clip_fractions))
         self.logger.record("train/loss", loss.item())
         self.logger.record("train/explained_variance", explained_var)
         if jepa_losses:
             self.logger.record("train/jepa_loss", np.mean(jepa_losses))
+        if weighted_jepa_losses:
+            self.logger.record("train/weighted_jepa_loss", np.mean(weighted_jepa_losses))
         if jepa_pred_stds:
             self.logger.record("train/jepa_pred_std", np.mean(jepa_pred_stds))
         if jepa_tgt_stds:
