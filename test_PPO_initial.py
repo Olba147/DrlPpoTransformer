@@ -6,31 +6,47 @@ import numpy as np
 import pandas as pd
 import torch
 
-from stable_baselines3 import PPO
-
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
-from Training.sb3_jepa import JEPAFeatureExtractor
+from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
 from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
+from train_jepa_initial import (
+    PATCH_LEN,
+    PATCH_STRIDE,
+    JEPA_D_MODEL,
+    JEPA_N_FEATURES,
+    JEPA_N_TIME_FEATURES,
+    JEPA_NHEAD,
+    JEPA_NUM_LAYERS,
+    JEPA_DIM_FF,
+    JEPA_DROPOUT,
+    JEPA_POOLING,
+    JEPA_PRED_LEN,
+    EMA_START,
+    EMA_END,
+    EMA_EPOCHS,
+)
 
-MODEL_NAME = "ppo_initial"
-JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial"
+MODEL_NAME = "jepa_ppo3_emptry_start"
+JEPA_CHECKPOINT_DIR = "checkpoints"
 PPO_CHECKPOINT_PATH = f"checkpoints/{MODEL_NAME}/best_model.zip"
+TICKER_LIST_PATH = "logs/selected_tickers.txt"
 
 # ------------------------
 # Dataset + Env settings
 # ------------------------
-EPISODE_LENGTH_STEPS = 2340
-TRANSACTION_COST = 1e-3
+EPISODE_LENGTH_STEPS = 2048
+TRANSACTION_COST = 1e-5
 ALLOW_SHORT = True
 INCLUDE_WEALTH = False
+ASSET_EMBED_DIM = 16
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
     "data_path": r"data_raw_1m",
     "start_date": None,
     "split": "test",
-    "size": [1024, 96],
+    "size": [1024, 48],
     "use_time_features": True,
     "rolling_window": 252,
     "train_split": 0.7,
@@ -38,6 +54,13 @@ dataset_kwargs = {
     "regular_hours_only": True,
     "timeframe": "5min",
 }
+
+def load_tickers(path: str) -> list | None:
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        tickers = [line.strip() for line in f if line.strip()]
+    return tickers or None
 
 
 @dataclass
@@ -64,44 +87,44 @@ def annualization_factor(cfg: EvalConfig) -> float:
     return bars_per_day * cfg.annual_trading_days
 
 
-def build_jepa_encoder(device: str, num_assets: int) -> torch.nn.Module:
+def build_jepa_model(device: str, num_assets: int) -> JEPA:
     jepa_context_encoder = PatchTSTEncoder(
-        patch_len=16,
-        d_model=256,
-        n_features=9,
-        n_time_features=2,
-        nhead=4,
-        num_layers=3,
-        dim_ff=512,
-        dropout=0.1,
+        patch_len=PATCH_LEN,
+        d_model=JEPA_D_MODEL,
+        n_features=JEPA_N_FEATURES,
+        n_time_features=JEPA_N_TIME_FEATURES,
+        nhead=JEPA_NHEAD,
+        num_layers=JEPA_NUM_LAYERS,
+        dim_ff=JEPA_DIM_FF,
+        dropout=JEPA_DROPOUT,
         add_cls=True,
-        pooling="mean",
-        pred_len=96,
-        num_assets=num_assets,
+        pooling=JEPA_POOLING,
+        pred_len=JEPA_PRED_LEN,
     )
 
     jepa_target_encoder = PatchTSTEncoder(
-        patch_len=16,
-        d_model=256,
-        n_features=9,
-        n_time_features=2,
-        nhead=4,
-        num_layers=3,
-        dim_ff=512,
-        dropout=0.1,
+        patch_len=PATCH_LEN,
+        d_model=JEPA_D_MODEL,
+        n_features=JEPA_N_FEATURES,
+        n_time_features=JEPA_N_TIME_FEATURES,
+        nhead=JEPA_NHEAD,
+        num_layers=JEPA_NUM_LAYERS,
+        dim_ff=JEPA_DIM_FF,
+        dropout=JEPA_DROPOUT,
         add_cls=True,
-        pooling="mean",
-        pred_len=96,
-        num_assets=num_assets,
+        pooling=JEPA_POOLING,
+        pred_len=JEPA_PRED_LEN,
     )
 
     jepa_model = JEPA(
         jepa_context_encoder,
         jepa_target_encoder,
-        d_model=256,
-        ema_start=0.99,
-        ema_end=0.999,
-        n_epochs=20,
+        d_model=JEPA_D_MODEL,
+        ema_start=EMA_START,
+        ema_end=EMA_END,
+        n_epochs=EMA_EPOCHS,
+        num_assets=num_assets,
+        action_dim=1,
     )
 
     checkpoint_path = os.path.join(JEPA_CHECKPOINT_DIR, "best.pt")
@@ -116,19 +139,18 @@ def build_jepa_encoder(device: str, num_assets: int) -> torch.nn.Module:
     else:
         print("No JEPA checkpoint found, using randomly initialized encoder.")
 
-    jepa_encoder = jepa_model.context_enc
-    for param in jepa_encoder.parameters():
+    for param in jepa_model.parameters():
         param.requires_grad = False
-    jepa_encoder.eval()
-    return jepa_encoder.to(device)
+    jepa_model.eval()
+    return jepa_model.to(device)
 
 
-def load_ppo_model(model_path: str, device: str, policy_kwargs: Dict) -> PPO:
+def load_ppo_model(model_path: str, device: str, policy_kwargs: Dict) -> PPOWithJEPA:
     try:
-        return PPO.load(model_path, device=device)
+        return PPOWithJEPA.load(model_path, device=device)
     except Exception as exc:
         print(f"Primary PPO load failed ({exc}); retrying with custom policy_kwargs.")
-        return PPO.load(model_path, device=device, custom_objects={"policy_kwargs": policy_kwargs})
+        return PPOWithJEPA.load(model_path, device=device, custom_objects={"policy_kwargs": policy_kwargs})
 
 
 def compute_drawdown(equity: np.ndarray) -> float:
@@ -157,7 +179,8 @@ def eval_asset(
     ohlcv = dataset.ohlcv[asset_id]
 
     seq_len = dataset.seq_len
-    n_steps = len(X) - seq_len - 1
+    pred_len = dataset.pred_len
+    n_steps = len(X) - seq_len - pred_len
     if n_steps <= 0:
         return {}
 
@@ -172,14 +195,19 @@ def eval_asset(
     for cursor in range(n_steps):
         x_context = X[cursor : cursor + seq_len].astype(np.float32)
         t_context = dates[cursor : cursor + seq_len].astype(np.float32)
+        x_target = X[cursor + seq_len : cursor + seq_len + pred_len].astype(np.float32)
+        t_target = dates[cursor + seq_len : cursor + seq_len + pred_len].astype(np.float32)
 
         obs = {
             "x_context": x_context,
             "t_context": t_context,
+            "x_target": x_target,
+            "t_target": t_target,
             "asset_id": np.int64(asset_idx),
             "w_prev": np.array([w_prev], dtype=np.float32),
-            "wealth_feats": np.array([np.log(wealth)], dtype=np.float32) if INCLUDE_WEALTH else np.zeros((0,), dtype=np.float32),
         }
+        if INCLUDE_WEALTH:
+            obs["wealth_feats"] = np.array([np.log(wealth)], dtype=np.float32)
 
         action, _ = model.predict(obs, deterministic=True)
         w_t = float(np.clip(np.array(action).reshape(-1)[0], -1.0, 1.0))
@@ -280,19 +308,27 @@ def eval_asset(
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Loading test dataset...")
+    tickers = load_tickers(TICKER_LIST_PATH)
+    if tickers:
+        print(f"Using tickers from {TICKER_LIST_PATH}: {tickers}")
+        dataset_kwargs["tickers"] = tickers
     test_dataset = Dataset_Finance_MultiAsset(**dataset_kwargs)
     if not test_dataset.asset_ids:
         raise RuntimeError("No assets found in the test dataset.")
 
-    print("Loading JEPA encoder...")
-    jepa_encoder = build_jepa_encoder(device, num_assets=len(test_dataset.asset_ids))
+    print("Loading JEPA model...")
+    jepa_model = build_jepa_model(device, num_assets=len(test_dataset.asset_ids))
     policy_kwargs = dict(
-        features_extractor_class=JEPAFeatureExtractor,
+        features_extractor_class=JEPAAuxFeatureExtractor,
         features_extractor_kwargs=dict(
-            jepa_encoder=jepa_encoder,
-            embedding_dim=256,
-            patch_len=16,
-            patch_stride=16,
+            jepa_model=jepa_model,
+            embedding_dim=JEPA_D_MODEL,
+            patch_len=PATCH_LEN,
+            patch_stride=PATCH_STRIDE,
+            use_obs_targets=True,
+            target_len=test_dataset.pred_len,
+            num_assets=len(test_dataset.asset_ids),
+            asset_embed_dim=ASSET_EMBED_DIM,
         ),
         net_arch=dict(pi=[256, 256], vf=[256, 256]),
     )

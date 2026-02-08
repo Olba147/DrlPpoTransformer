@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+import random
 
 # import jepa params
 from train_jepa_initial import DATASET_CONTEXT_LEN, DATASET_TARGET_LEN
@@ -24,8 +25,8 @@ JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial3"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-EPISODE_LENGTH_STEPS = 2048
-ROLLOUT_LENGTH_STEPS = 2048
+EPISODE_LENGTH_STEPS = 1024
+ROLLOUT_LENGTH_STEPS = 1024
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 16
 
@@ -36,9 +37,9 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
 
-ENT_COEF_START = 0.05
+ENT_COEF_START = 0.02
 ENT_COEF_END = 0.01
-ENT_WARMUP_FRACTION = 0.2
+ENT_WARMUP_FRACTION = 0.3
 
 VF_COEF = 0.5
 MAX_GRAD_NORM = 0.5
@@ -46,13 +47,16 @@ TARGET_KL = 0.02
 UPDATE_JEPA = True
 JEPA_LOSS_COEF = 0.1
 
-EVAL_EPISODES = 10
+EVAL_EPISODES = 2
 EVAL_EPISODE_LEN = 512
-EVAL_EVERY_STEPS = 10_000
-CHECKPOINT_EVERY_STEPS = 500_000
+EVAL_EVERY_STEPS = 4*1024
+CHECKPOINT_EVERY_STEPS = 10_000
 
 TRANSACTION_COST = 1e-5 # only for initial training to support exploration
 INCLUDE_WEALTH = False
+NUM_RANDOM_TICKERS = 5
+RANDOM_TICKER_SEED = None  # set int for reproducibility
+TICKER_LIST_PATH = "logs/selected_tickers.txt"
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
@@ -68,6 +72,25 @@ dataset_kwargs = {
     "timeframe": "5min",
 }
 
+def pick_random_tickers(root_path: str, data_path: str, num: int, seed: int | None = None) -> list:
+    path = os.path.join(root_path, data_path)
+    if seed is not None:
+        random.seed(seed)
+    tickers = []
+    if os.path.isdir(path):
+        for fname in os.listdir(path):
+            if fname.endswith(".parquet"):
+                tickers.append(os.path.splitext(fname)[0])
+    if len(tickers) < num:
+        raise RuntimeError(f"Not enough tickers to sample {num} from {path}. Found {len(tickers)}.")
+    return random.sample(tickers, num)
+
+def save_tickers(tickers: list, path: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for t in tickers:
+            f.write(f"{t}\n")
+
 def make_env(dataset, episode_len):
     return lambda: GymTradingEnv(
         dataset,
@@ -79,6 +102,15 @@ def make_env(dataset, episode_len):
 
 def main():
     print("Loading datasets...")
+    tickers = pick_random_tickers(
+        root_path=dataset_kwargs["root_path"],
+        data_path=dataset_kwargs["data_path"],
+        num=NUM_RANDOM_TICKERS,
+        seed=RANDOM_TICKER_SEED,
+    )
+    print(f"Selected tickers: {tickers}")
+    dataset_kwargs["tickers"] = tickers
+    save_tickers(tickers, TICKER_LIST_PATH)
     train_dataset = Dataset_Finance_MultiAsset(**dataset_kwargs)
     val_dataset = Dataset_Finance_MultiAsset(**{**dataset_kwargs, "split": "val"})
     num_assets = len(train_dataset.asset_ids)
