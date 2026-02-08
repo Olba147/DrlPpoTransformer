@@ -30,7 +30,7 @@ ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 16
 
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 1e-4
 PPO_EPOCHS = 1
 BATCH_SIZE = 512
 GAMMA = 0.99
@@ -38,7 +38,7 @@ GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
 
 ENT_COEF_START = 0.02
-ENT_COEF_END = 0.01
+ENT_COEF_END = 0.02
 ENT_WARMUP_FRACTION = 0.3
 
 VF_COEF = 0.5
@@ -50,7 +50,7 @@ JEPA_LOSS_COEF = 0.1
 EVAL_EPISODES = 2
 EVAL_EPISODE_LEN = 512
 EVAL_EVERY_STEPS = 4*1024
-CHECKPOINT_EVERY_STEPS = 10_000
+CHECKPOINT_EVERY_STEPS = 50_000
 
 TRANSACTION_COST = 0 # only for initial training to support exploration
 INCLUDE_WEALTH = False
@@ -157,7 +157,6 @@ def main():
         ema_start=EMA_START,
         ema_end=EMA_END,
         n_epochs=EMA_EPOCHS,
-        action_dim=1,
     )
 
     checkpoint_path = os.path.join(JEPA_CHECKPOINT_DIR, "best.pt")

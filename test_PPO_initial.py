@@ -28,8 +28,8 @@ from train_jepa_initial import (
 )
 
 MODEL_NAME = "jepa_ppo3_emptry_start"
-JEPA_CHECKPOINT_DIR = "checkpoints"
-PPO_CHECKPOINT_PATH = f"checkpoints/{MODEL_NAME}/best_model.zip"
+PPO_CHECKPOINT_PATH = f"checkpoints/{MODEL_NAME}/ppo_5920000_steps"
+JEPA_CHECKPOINT_PATH = f"checkpoints/{MODEL_NAME}/jepa_step_370000.pt"
 TICKER_LIST_PATH = "logs/selected_tickers.txt"
 
 # ------------------------
@@ -100,6 +100,7 @@ def build_jepa_model(device: str, num_assets: int) -> JEPA:
         add_cls=True,
         pooling=JEPA_POOLING,
         pred_len=JEPA_PRED_LEN,
+        num_assets=num_assets,
     )
 
     jepa_target_encoder = PatchTSTEncoder(
@@ -114,6 +115,7 @@ def build_jepa_model(device: str, num_assets: int) -> JEPA:
         add_cls=True,
         pooling=JEPA_POOLING,
         pred_len=JEPA_PRED_LEN,
+        num_assets=num_assets,
     )
 
     jepa_model = JEPA(
@@ -123,14 +125,11 @@ def build_jepa_model(device: str, num_assets: int) -> JEPA:
         ema_start=EMA_START,
         ema_end=EMA_END,
         n_epochs=EMA_EPOCHS,
-        num_assets=num_assets,
-        action_dim=1,
     )
 
-    checkpoint_path = os.path.join(JEPA_CHECKPOINT_DIR, "best.pt")
-    if os.path.exists(checkpoint_path):
-        print(f"Loading JEPA weights from {checkpoint_path}")
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    if os.path.exists(JEPA_CHECKPOINT_PATH):
+        print(f"Loading JEPA weights from {JEPA_CHECKPOINT_PATH}")
+        checkpoint = torch.load(JEPA_CHECKPOINT_PATH, map_location="cpu")
         missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
         if missing:
             print(f"Missing keys in checkpoint: {missing}")
@@ -168,7 +167,7 @@ def safe_sharpe(mean: float, std: float, ann_factor: float) -> float:
 
 
 def eval_asset(
-    model: PPO,
+    model: PPOWithJEPA,
     dataset: Dataset_Finance_MultiAsset,
     asset_id: str,
     cfg: EvalConfig,

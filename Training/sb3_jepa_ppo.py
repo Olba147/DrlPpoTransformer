@@ -88,7 +88,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
     def compute_jepa_aux(
         self,
         observations: Dict[str, th.Tensor],
-        actions: Optional[th.Tensor] = None,
     ) -> tuple[Optional[th.Tensor], Optional[float], Optional[float]]:
         x_context = self._ensure_batched(observations["x_context"])
         t_context = self._ensure_batched(observations["t_context"])
@@ -115,9 +114,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         x_tgt_p = self._patch(x_target)
         t_tgt_p = self._patch(t_target)
 
-        if actions is not None and actions.dim() == 1:
-            actions = actions.unsqueeze(-1)
-        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p, action=actions, asset_id=asset_id)
+        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p, asset_id=asset_id)
         loss = F.mse_loss(p_c, z_t)
         pred_std = float(p_c.std(dim=-1).mean().detach().cpu().item())
         tgt_std = float(z_t.std(dim=-1).mean().detach().cpu().item())
@@ -304,7 +301,6 @@ class PPOWithJEPA(PPO):
                     if hasattr(fx, "compute_jepa_aux"):
                         jepa_loss, pred_std, tgt_std = fx.compute_jepa_aux(
                             rollout_data.observations,
-                            actions=rollout_data.actions,
                         )
                         if jepa_loss is not None:
                             loss = loss + self.jepa_coef * jepa_loss
