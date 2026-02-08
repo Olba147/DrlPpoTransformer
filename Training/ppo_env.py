@@ -82,7 +82,9 @@ class TradingEnv:
         if self.state is None:
             raise RuntimeError("Environment must be reset before stepping.")
 
-        w_t = float(np.clip(action, -1.0, 1.0))
+        delta_w = float(np.clip(action, -1.0, 1.0))
+        w_t = self.state.w_prev + delta_w
+        w_t = float(np.clip(w_t, -1.0, 1.0))
         if not self.allow_short:
             w_t = max(0.0, w_t)
 

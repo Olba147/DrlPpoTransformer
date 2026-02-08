@@ -24,17 +24,17 @@ JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial2"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-EPISODE_LENGTH_STEPS = 2340
-ROLLOUT_LENGTH_STEPS = 1024
+EPISODE_LENGTH_STEPS = 2048
+ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 4
 
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 1e-4
 PPO_EPOCHS = 4
 BATCH_SIZE = 512
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
-CLIP_RANGE = 0.15
+CLIP_RANGE = 0.2
 
 ENT_COEF_START = 0.05
 ENT_COEF_END = 0.01
@@ -121,6 +121,7 @@ def main():
         ema_start=EMA_END,
         ema_end=EMA_END,
         n_epochs=EMA_EPOCHS,
+        action_dim=1,
     )
 
     checkpoint_path = os.path.join(JEPA_CHECKPOINT_DIR, "best.pt")
