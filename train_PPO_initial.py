@@ -25,13 +25,13 @@ JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial3"
 # Hyperparameters (edit here)
 # ------------------------
 EPISODE_LENGTH_STEPS = 2048
-ROLLOUT_LENGTH_STEPS = 4096
+ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
-N_ENVS = 2
+N_ENVS = 16
 
-LEARNING_RATE = 1e-4
-PPO_EPOCHS = 4
-BATCH_SIZE = 1024
+LEARNING_RATE = 5e-5
+PPO_EPOCHS = 1
+BATCH_SIZE = 512
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
@@ -82,7 +82,7 @@ def main():
     val_dataset = Dataset_Finance_MultiAsset(**{**dataset_kwargs, "split": "val"})
 
     print("Building environments...")
-    train_env = DummyVecEnv([make_env(train_dataset, EPISODE_LENGTH_STEPS) for _ in range(N_ENVS)])
+    train_env = SubprocVecEnv([make_env(train_dataset, EPISODE_LENGTH_STEPS) for _ in range(N_ENVS)])
     eval_env = DummyVecEnv([make_env(val_dataset, EPISODE_LENGTH_STEPS)])
 
     print("Loading JEPA encoder...")
