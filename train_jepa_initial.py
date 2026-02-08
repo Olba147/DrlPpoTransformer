@@ -80,6 +80,7 @@ def main():
 
     train_loader = dataloaders.train_loader()
     val_loader = dataloaders.val_loader()
+    num_assets = len(dataloaders.train.dataset.asset_ids)
 
     # 2) Model
     jepa_context_encoder = PatchTSTEncoder(
@@ -94,6 +95,7 @@ def main():
         add_cls=JEPA_ADD_CLS,
         pooling=JEPA_POOLING,  # "cls" | "mean"
         pred_len=JEPA_PRED_LEN,
+        num_assets=num_assets,
     )
 
     jepa_target_encoder = PatchTSTEncoder(
@@ -108,6 +110,7 @@ def main():
         add_cls=JEPA_ADD_CLS,
         pooling=JEPA_POOLING,  # "cls" | "mean"
         pred_len=JEPA_PRED_LEN,
+        num_assets=num_assets,
     )
 
     jepa_model = JEPA(
@@ -126,7 +129,11 @@ def main():
         print(f"Loading model weights from {checkpoint_path}")
         try:
             checkpoint = torch.load(checkpoint_path, map_location="cpu")
-            jepa_model.load_state_dict(checkpoint["model"])
+            missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
+            if missing:
+                print(f"Missing keys in checkpoint: {missing}")
+            if unexpected:
+                print(f"Unexpected keys in checkpoint: {unexpected}")
             epoch = checkpoint["epoch"]
             monitor = checkpoint["monitor"]
             print(f"Loaded model weights from {checkpoint_path} at epoch {epoch} with monitor {monitor}")

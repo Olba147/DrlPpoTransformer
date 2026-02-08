@@ -58,6 +58,19 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
             return x.unsqueeze(0)
         return x
 
+    def _get_asset_id(self, observations: Dict[str, th.Tensor]) -> Optional[th.Tensor]:
+        asset_id = observations.get("asset_id")
+        if asset_id is None:
+            return None
+        # SB3 preprocesses Discrete obs to one-hot (float). Convert back to indices.
+        if asset_id.dim() >= 2 and asset_id.shape[-1] > 1:
+            asset_id = th.argmax(asset_id, dim=-1)
+        if asset_id.dim() == 0:
+            asset_id = asset_id.unsqueeze(0)
+        if asset_id.dim() == 2 and asset_id.shape[1] == 1:
+            asset_id = asset_id.squeeze(1)
+        return asset_id.long()
+
     def _split_context(self, x: th.Tensor) -> tuple[th.Tensor, th.Tensor]:
         seq_len = x.shape[1]
         if self.target_len is not None:
@@ -79,6 +92,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
     ) -> tuple[Optional[th.Tensor], Optional[float], Optional[float]]:
         x_context = self._ensure_batched(observations["x_context"])
         t_context = self._ensure_batched(observations["t_context"])
+        asset_id = self._get_asset_id(observations)
 
         # Build JEPA targets
         if self.use_obs_targets and "x_target" in observations and "t_target" in observations:
@@ -103,7 +117,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
 
         if actions is not None and actions.dim() == 1:
             actions = actions.unsqueeze(-1)
-        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p, action=actions)
+        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p, action=actions, asset_id=asset_id)
         loss = F.mse_loss(p_c, z_t)
         pred_std = float(p_c.std(dim=-1).mean().detach().cpu().item())
         tgt_std = float(z_t.std(dim=-1).mean().detach().cpu().item())
@@ -115,6 +129,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
     def forward(self, observations: Dict[str, th.Tensor]) -> th.Tensor:
         x_context = self._ensure_batched(observations["x_context"])
         t_context = self._ensure_batched(observations["t_context"])
+        asset_id = self._get_asset_id(observations)
 
         # Features for PPO: use full context embedding
         x_full = self._ensure_batched(observations["x_context"])
@@ -122,7 +137,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         x_full_p = self._patch(x_full)
         t_full_p = self._patch(t_full)
 
-        z_t = self.jepa_model.context_enc(x_full_p, t_full_p)
+        z_t = self.jepa_model.context_enc(x_full_p, t_full_p, asset_id=asset_id)
         if z_t.dim() == 1:
             z_t = z_t.unsqueeze(0)
 

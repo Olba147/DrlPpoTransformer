@@ -35,11 +35,11 @@ class JEPA(nn.Module):
 
         self.proj_target.load_state_dict(self.proj_online.state_dict())
 
-    def forward(self, X_ctx, T_ctx, X_tgt, T_tgt, action=None):
+    def forward(self, X_ctx, T_ctx, X_tgt, T_tgt, action=None, asset_id=None):
 
-        z_c = self.proj_online(self.context_enc(X_ctx, T_ctx))        # [B, D]
+        z_c = self.proj_online(self.context_enc(X_ctx, T_ctx, asset_id=asset_id))        # [B, D]
         with torch.no_grad():
-            z_t = self.proj_target(self.target_enc(X_tgt, T_tgt))     # [B, D]
+            z_t = self.proj_target(self.target_enc(X_tgt, T_tgt, asset_id=asset_id))     # [B, D]
         h = self.predictor_act(self.predictor_fc1(z_c))
         if self.action_proj is not None and action is not None:
             if action.dim() == 1:

@@ -48,7 +48,7 @@ JEPA_LOSS_COEF = 0.1
 
 EVAL_EPISODES = 10
 EVAL_EPISODE_LEN = 512
-EVAL_EVERY_STEPS = 50_000
+EVAL_EVERY_STEPS = 10_000
 CHECKPOINT_EVERY_STEPS = 500_000
 
 TRANSACTION_COST = 1e-5 # only for initial training to support exploration
@@ -81,6 +81,7 @@ def main():
     print("Loading datasets...")
     train_dataset = Dataset_Finance_MultiAsset(**dataset_kwargs)
     val_dataset = Dataset_Finance_MultiAsset(**{**dataset_kwargs, "split": "val"})
+    num_assets = len(train_dataset.asset_ids)
 
     print("Building environments...")
     train_env = SubprocVecEnv([make_env(train_dataset, EPISODE_LENGTH_STEPS) for _ in range(N_ENVS)])
@@ -99,6 +100,7 @@ def main():
         add_cls=True,
         pooling=JEPA_POOLING,
         pred_len=JEPA_PRED_LEN,
+        num_assets=num_assets,
     )
 
     jepa_target_encoder = PatchTSTEncoder(
@@ -113,6 +115,7 @@ def main():
         add_cls=True,
         pooling=JEPA_POOLING,
         pred_len=JEPA_PRED_LEN,
+        num_assets=num_assets,
     )
 
     jepa_model = JEPA(
@@ -129,7 +132,11 @@ def main():
     if os.path.exists(checkpoint_path):
         print(f"Loading JEPA weights from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        jepa_model.load_state_dict(checkpoint["model"])
+        missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
+        if missing:
+            print(f"Missing keys in checkpoint: {missing}")
+        if unexpected:
+            print(f"Unexpected keys in checkpoint: {unexpected}")
     else:
         print("No JEPA checkpoint found, using randomly initialized encoder.")
 

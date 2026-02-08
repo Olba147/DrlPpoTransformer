@@ -64,7 +64,7 @@ def annualization_factor(cfg: EvalConfig) -> float:
     return bars_per_day * cfg.annual_trading_days
 
 
-def build_jepa_encoder(device: str) -> torch.nn.Module:
+def build_jepa_encoder(device: str, num_assets: int) -> torch.nn.Module:
     jepa_context_encoder = PatchTSTEncoder(
         patch_len=16,
         d_model=256,
@@ -77,6 +77,7 @@ def build_jepa_encoder(device: str) -> torch.nn.Module:
         add_cls=True,
         pooling="mean",
         pred_len=96,
+        num_assets=num_assets,
     )
 
     jepa_target_encoder = PatchTSTEncoder(
@@ -91,6 +92,7 @@ def build_jepa_encoder(device: str) -> torch.nn.Module:
         add_cls=True,
         pooling="mean",
         pred_len=96,
+        num_assets=num_assets,
     )
 
     jepa_model = JEPA(
@@ -106,7 +108,11 @@ def build_jepa_encoder(device: str) -> torch.nn.Module:
     if os.path.exists(checkpoint_path):
         print(f"Loading JEPA weights from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        jepa_model.load_state_dict(checkpoint["model"])
+        missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
+        if missing:
+            print(f"Missing keys in checkpoint: {missing}")
+        if unexpected:
+            print(f"Unexpected keys in checkpoint: {unexpected}")
     else:
         print("No JEPA checkpoint found, using randomly initialized encoder.")
 
@@ -145,6 +151,7 @@ def eval_asset(
     asset_id: str,
     cfg: EvalConfig,
 ) -> Dict[str, float]:
+    asset_idx = dataset.asset_id_to_idx.get(asset_id, -1)
     X = dataset.data_x[asset_id]
     dates = dataset.dates[asset_id]
     ohlcv = dataset.ohlcv[asset_id]
@@ -169,6 +176,7 @@ def eval_asset(
         obs = {
             "x_context": x_context,
             "t_context": t_context,
+            "asset_id": np.int64(asset_idx),
             "w_prev": np.array([w_prev], dtype=np.float32),
             "wealth_feats": np.array([np.log(wealth)], dtype=np.float32) if INCLUDE_WEALTH else np.zeros((0,), dtype=np.float32),
         }
@@ -277,7 +285,7 @@ def main():
         raise RuntimeError("No assets found in the test dataset.")
 
     print("Loading JEPA encoder...")
-    jepa_encoder = build_jepa_encoder(device)
+    jepa_encoder = build_jepa_encoder(device, num_assets=len(test_dataset.asset_ids))
     policy_kwargs = dict(
         features_extractor_class=JEPAFeatureExtractor,
         features_extractor_kwargs=dict(

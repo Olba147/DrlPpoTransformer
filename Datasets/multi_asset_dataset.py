@@ -121,6 +121,7 @@ class Dataset_Finance_MultiAsset(Dataset):
         self.log_splits = log_splits
 
         self.asset_ids = []
+        self.asset_id_to_idx = {}
         self.data_x = {}
         self.ohlcv = {}
         self.dates = {}
@@ -128,6 +129,7 @@ class Dataset_Finance_MultiAsset(Dataset):
         self.split_info = {}
 
         self._read_and_build()
+        self.asset_id_to_idx = {asset_id: idx for idx, asset_id in enumerate(self.asset_ids)}
 
     def _load_asset(self, path: str = None, df: pd.DataFrame = None):
         if df is None:
@@ -289,6 +291,7 @@ class Dataset_Finance_MultiAsset(Dataset):
 
     def __getitem__(self, index):
         asset_id, i = self.index_registry[index]
+        asset_idx = self.asset_id_to_idx.get(asset_id, -1)
 
         s_begin = i
         s_end = s_begin + self.seq_len
@@ -311,6 +314,7 @@ class Dataset_Finance_MultiAsset(Dataset):
             "t_target": torch.from_numpy(dates_target).float(),
             "ohlcv_context": torch.from_numpy(ohlcv_context).float(),
             "ohlcv_target": torch.from_numpy(ohlcv_target).float(),
+            "asset_id": torch.tensor(asset_idx, dtype=torch.long),
         }
 
 
@@ -351,11 +355,13 @@ class Dataset_Finance_MultiAsset_Pred(Dataset):
         self.timeframe = timeframe
 
         self.asset_ids = []
+        self.asset_id_to_idx = {}
         self.data_x = {}
         self.ohlcv = {}
         self.index_registry = []
 
         self._read_and_build()
+        self.asset_id_to_idx = {asset_id: idx for idx, asset_id in enumerate(self.asset_ids)}
 
 
     def _load_asset(self, path: str):
@@ -439,6 +445,7 @@ class Dataset_Finance_MultiAsset_Pred(Dataset):
 
     def __getitem__(self, idx):
         asset_id, i = self.index_registry[idx]
+        asset_idx = self.asset_id_to_idx.get(asset_id, -1)
 
         s_begin = i
         s_end = s_begin + self.seq_len
@@ -456,4 +463,5 @@ class Dataset_Finance_MultiAsset_Pred(Dataset):
             "x_target": torch.from_numpy(x_target).float(),
             "ohlcv_context": torch.from_numpy(ohlcv_context).float(),
             "ohlcv_target": torch.from_numpy(ohlcv_target).float(),
+            "asset_id": torch.tensor(asset_idx, dtype=torch.long),
         }

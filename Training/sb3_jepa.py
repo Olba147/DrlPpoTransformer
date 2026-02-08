@@ -42,13 +42,27 @@ class JEPAFeatureExtractor(BaseFeaturesExtractor):
         t_patched = make_patches(t_context, self.patch_len, self.patch_stride)
         return {"x_context": x_patched, "t_context": t_patched}
 
+    def _get_asset_id(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor | None:
+        asset_id = observations.get("asset_id")
+        if asset_id is None:
+            return None
+        # SB3 preprocesses Discrete obs to one-hot (float). Convert back to indices.
+        if asset_id.dim() >= 2 and asset_id.shape[-1] > 1:
+            asset_id = torch.argmax(asset_id, dim=-1)
+        if asset_id.dim() == 0:
+            asset_id = asset_id.unsqueeze(0)
+        if asset_id.dim() == 2 and asset_id.shape[1] == 1:
+            asset_id = asset_id.squeeze(1)
+        return asset_id.long()
+
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:
         x_context = observations["x_context"]
         t_context = observations["t_context"]
+        asset_id = self._get_asset_id(observations)
         patched = self._ensure_patched(x_context, t_context)
 
         with torch.no_grad():
-            z_t = self.jepa_encoder(patched["x_context"], patched["t_context"])
+            z_t = self.jepa_encoder(patched["x_context"], patched["t_context"], asset_id=asset_id)
 
         if z_t.dim() == 1:
             z_t = z_t.unsqueeze(0)

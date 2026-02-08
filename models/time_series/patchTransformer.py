@@ -20,21 +20,6 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         return x + self.pe[:, :x.size(1), :]
 
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 10000):
-        super().__init__()
-        pe = torch.zeros(max_len, d_model)
-        pos = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(pos * div)
-        pe[:, 1::2] = torch.cos(pos * div)
-        self.register_buffer("pe", pe.unsqueeze(0), persistent=False)  # (1, L, D)
-
-    def forward(self, x):
-        return x + self.pe[:, :x.size(1), :]
-    
-
 class PatchTSTEncoder(nn.Module):
     """
     Inputs:
@@ -64,7 +49,8 @@ class PatchTSTEncoder(nn.Module):
         dropout: float = 0.1,
         add_cls: bool = True,
         pooling: str = "cls",        # "cls" | "mean"
-        pred_len: int = 96
+        pred_len: int = 96,
+        num_assets: int | None = None,
     ):
         super().__init__()
         self.patch_len = patch_len
@@ -76,6 +62,8 @@ class PatchTSTEncoder(nn.Module):
         self.proj_price = nn.Linear(patch_len * self.n_features, d_model)
         self.proj_time  = nn.Linear(patch_len * self.n_time_features * 2, d_model)  # 4 = sin/cos weekday + sin/cos minute
         self.time_gate  = nn.Parameter(torch.tensor(0.1))    # optional learnable scale
+        self.asset_emb = nn.Embedding(num_assets, d_model) if num_assets is not None else None
+        self.asset_gate = nn.Parameter(torch.tensor(0.1)) if num_assets is not None else None
 
         self.posenc = PositionalEncoding(d_model, max_len=10000)
 
@@ -111,7 +99,7 @@ class PatchTSTEncoder(nn.Module):
         time_sc = torch.cat([wd_sc, mod_sc], dim=-1)    # [B, N, P, 4]
         return time_sc.reshape(B, N, P * 4)             # [B, N, P*4]
 
-    def forward(self, X_patch: torch.Tensor, time_cont_patch: torch.Tensor):
+    def forward(self, X_patch: torch.Tensor, time_cont_patch: torch.Tensor, asset_id: torch.Tensor | None = None):
         """
         X_patch        : [B, N, patch_len*6]
         time_cont_patch: [B, N, patch_len*2]
@@ -126,6 +114,12 @@ class PatchTSTEncoder(nn.Module):
         if self.cls is not None:
             cls = self.cls.expand(tok.size(0), -1, -1)       # [B,1,D]
             tok = torch.cat([cls, tok], dim=1)               # [B, 1+N, D]
+
+        if self.asset_emb is not None and asset_id is not None:
+            if asset_id.dim() > 1:
+                asset_id = asset_id.view(-1)
+            asset_vec = self.asset_emb(asset_id.long())       # [B, D]
+            tok = tok + self.asset_gate * asset_vec.unsqueeze(1)
 
         tok = self.posenc(tok)
         z = self.encoder(tok)                                 # [B, T, D]

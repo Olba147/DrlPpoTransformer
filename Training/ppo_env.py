@@ -54,6 +54,7 @@ class TradingEnv:
         return float(self.dataset.ohlcv[asset_id][idx][3])
 
     def _observe(self, asset_id: str, cursor: int, w_prev: float, wealth: float) -> Dict:
+        asset_idx = self.dataset.asset_id_to_idx.get(asset_id, -1)
         x_context = self.dataset.data_x[asset_id][cursor : cursor + self.seq_len]
         t_context = self.dataset.dates[asset_id][cursor : cursor + self.seq_len]
         x_target = self.dataset.data_x[asset_id][
@@ -67,6 +68,7 @@ class TradingEnv:
             "t_context": t_context.astype(np.float32),
             "x_target": x_target.astype(np.float32),
             "t_target": t_target.astype(np.float32),
+            "asset_id": np.int64(asset_idx),
             "w_prev": np.array([w_prev], dtype=np.float32),
         }
         if self.include_wealth:
@@ -145,6 +147,7 @@ class GymTradingEnv(gym.Env):
         pred_len = dataset.pred_len
         n_features = dataset.data_x[dataset.asset_ids[0]].shape[-1]
         n_time_features = dataset.dates[dataset.asset_ids[0]].shape[-1]
+        n_assets = len(dataset.asset_ids)
         obs_spaces = {
             "x_context": spaces.Box(
                 low=-np.inf, high=np.inf, shape=(seq_len, n_features), dtype=np.float32
@@ -158,6 +161,7 @@ class GymTradingEnv(gym.Env):
             "t_target": spaces.Box(
                 low=-np.inf, high=np.inf, shape=(pred_len, n_time_features), dtype=np.float32
             ),
+            "asset_id": spaces.Discrete(n_assets),
             "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
         }
         if include_wealth:
