@@ -27,10 +27,10 @@ JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial3"
 EPISODE_LENGTH_STEPS = 2048
 ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
-N_ENVS = 4
+N_ENVS = 8
 
 LEARNING_RATE = 1e-4
-PPO_EPOCHS = 4
+PPO_EPOCHS = 1
 BATCH_SIZE = 512
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
@@ -47,8 +47,8 @@ UPDATE_JEPA = True
 JEPA_LOSS_COEF = 1.0
 
 EVAL_EPISODES = 2
-EVAL_EVERY_STEPS = 10_000
-CHECKPOINT_EVERY_STEPS = 50_000
+EVAL_EVERY_STEPS = 100_000
+CHECKPOINT_EVERY_STEPS = 100_000
 
 TRANSACTION_COST = 1e-5 # only for initial training to support exploration
 INCLUDE_WEALTH = False
@@ -118,7 +118,7 @@ def main():
         jepa_context_encoder,
         jepa_target_encoder,
         d_model=JEPA_D_MODEL,
-        ema_start=EMA_END,
+        ema_start=EMA_START,
         ema_end=EMA_END,
         n_epochs=EMA_EPOCHS,
         action_dim=1,
