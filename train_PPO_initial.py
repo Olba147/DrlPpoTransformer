@@ -30,7 +30,7 @@ ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 16
 
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-5
 PPO_EPOCHS = 1
 BATCH_SIZE = 512
 GAMMA = 0.99
@@ -54,7 +54,7 @@ CHECKPOINT_EVERY_STEPS = 50_000
 
 TRANSACTION_COST = 0 # only for initial training to support exploration
 INCLUDE_WEALTH = False
-NUM_RANDOM_TICKERS = 5
+NUM_RANDOM_TICKERS = 10
 RANDOM_TICKER_SEED = None  # set int for reproducibility
 TICKER_LIST_PATH = "logs/selected_tickers.txt"
 
