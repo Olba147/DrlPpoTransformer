@@ -16,7 +16,7 @@ MODEL_NAME = "jepa_initial2"
 # Hyperparameters (edit here)
 # ------------------------
 DATASET_CONTEXT_LEN = 1048
-DATASET_TARGET_LEN = 48
+DATASET_TARGET_LEN = 96
 
 TRAIN_EPOCHS = 100
 TRAIN_BATCH_SIZE = 64

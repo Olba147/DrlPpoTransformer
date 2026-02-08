@@ -25,14 +25,14 @@ JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial3"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-EPISODE_LENGTH_STEPS = 1024
-ROLLOUT_LENGTH_STEPS = 1024
+EPISODE_LENGTH_STEPS = 2048
+ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 16
 
 LEARNING_RATE = 5e-5
-PPO_EPOCHS = 2
-BATCH_SIZE = 128
+PPO_EPOCHS = 1
+BATCH_SIZE = 512
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
@@ -52,7 +52,7 @@ EVAL_EPISODE_LEN = 512
 EVAL_EVERY_STEPS = 4*1024
 CHECKPOINT_EVERY_STEPS = 10_000
 
-TRANSACTION_COST = 1e-5 # only for initial training to support exploration
+TRANSACTION_COST = 0 # only for initial training to support exploration
 INCLUDE_WEALTH = False
 NUM_RANDOM_TICKERS = 5
 RANDOM_TICKER_SEED = None  # set int for reproducibility
