@@ -23,6 +23,7 @@ class TradingEnv:
         dataset,
         episode_len: int = 256,
         transaction_cost: float = 1e-3,
+        reward_scale: float = 1.0,
         allow_short: bool = True,
         include_wealth: bool = True,
         seed: Optional[int] = None,
@@ -30,6 +31,7 @@ class TradingEnv:
         self.dataset = dataset
         self.episode_len = episode_len
         self.transaction_cost = transaction_cost
+        self.reward_scale = reward_scale
         self.allow_short = allow_short
         self.include_wealth = include_wealth
         self.seq_len = dataset.seq_len
@@ -99,6 +101,7 @@ class TradingEnv:
         turnover = abs(w_t - self.state.w_prev)
         reward = w_t * r_tp1 - self.transaction_cost * turnover
         self.state.wealth *= float(np.exp(reward))
+        scaled_reward = reward * self.reward_scale
 
         self.state.cursor += 1
         self.state.step += 1
@@ -110,7 +113,7 @@ class TradingEnv:
         )
 
         obs = self._observe(asset_id, self.state.cursor, self.state.w_prev, self.state.wealth)
-        obs["reward"] = np.array(reward, dtype=np.float32)
+        obs["reward"] = np.array(scaled_reward, dtype=np.float32)
         obs["done"] = np.array(done, dtype=np.float32)
         obs["info"] = {
             "position": w_t,
@@ -129,6 +132,7 @@ class GymTradingEnv(gym.Env):
         dataset,
         episode_len: int = 256,
         transaction_cost: float = 1e-3,
+        reward_scale: float = 1.0,
         allow_short: bool = True,
         include_wealth: bool = True,
         seed: Optional[int] = None,
@@ -138,6 +142,7 @@ class GymTradingEnv(gym.Env):
             dataset=dataset,
             episode_len=episode_len,
             transaction_cost=transaction_cost,
+            reward_scale=reward_scale,
             allow_short=allow_short,
             include_wealth=include_wealth,
             seed=seed,

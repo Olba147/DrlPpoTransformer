@@ -342,6 +342,7 @@ class PPOWithJEPA(PPO):
                 fx.jepa_model.ema_update(self._n_updates)
 
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
+        reward_std = float(np.std(self.rollout_buffer.rewards)) if self.rollout_buffer.rewards.size else 0.0
 
         # Logs
         self.logger.record("train/entropy_loss", np.mean(entropy_losses))
@@ -355,6 +356,7 @@ class PPOWithJEPA(PPO):
         self.logger.record("train/clip_fraction", np.mean(clip_fractions))
         self.logger.record("train/loss", loss.item())
         self.logger.record("train/explained_variance", explained_var)
+        self.logger.record("train/reward_std", reward_std)
         if jepa_losses:
             self.logger.record("train/jepa_loss", np.mean(jepa_losses))
         if weighted_jepa_losses:

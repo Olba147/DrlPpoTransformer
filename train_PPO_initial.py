@@ -54,6 +54,7 @@ CHECKPOINT_EVERY_STEPS = 50_000
 
 TRANSACTION_COST = 0 # only for initial training to support exploration
 INCLUDE_WEALTH = False
+REWARD_SCALE = 100.0
 NUM_RANDOM_TICKERS = 10
 RANDOM_TICKER_SEED = None  # set int for reproducibility
 TICKER_LIST_PATH = "logs/selected_tickers.txt"
@@ -96,6 +97,7 @@ def make_env(dataset, episode_len):
         dataset,
         episode_len=episode_len,
         transaction_cost=TRANSACTION_COST,
+        reward_scale=REWARD_SCALE,
         allow_short=True,
         include_wealth=INCLUDE_WEALTH,
     )
