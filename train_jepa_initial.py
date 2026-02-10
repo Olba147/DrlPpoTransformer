@@ -40,9 +40,8 @@ JEPA_ADD_CLS = True
 JEPA_POOLING = "cls"   # "cls" | "mean"
 JEPA_PRED_LEN = 48
 
-EMA_START = 0.99
-EMA_END = 0.999
-EMA_EPOCHS = 20
+EMA_START = 0.996
+EMA_END   = 0.9999
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
@@ -118,8 +117,7 @@ def main():
         jepa_target_encoder,
         d_model=JEPA_D_MODEL,
         ema_start=EMA_START,
-        ema_end=EMA_END,
-        n_epochs=EMA_EPOCHS,
+        ema_end=EMA_END
     )
 
     # load model weights from checkpoints/best.pt if exists
