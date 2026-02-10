@@ -31,11 +31,11 @@ class JEPA(nn.Module):
         )
 
         # make sure that target encoder is initialized the same as context encoder
-        # self.target_enc.load_state_dict(self.context_enc.state_dict())
-        # for p in self.target_enc.parameters():
-        #     p.requires_grad_(False)
-        # for p in self.proj_target.parameters():
-        #     p.requires_grad_(False)
+        self.target_enc.load_state_dict(self.context_enc.state_dict())
+        for p in self.target_enc.parameters():
+            p.requires_grad_(False)
+        for p in self.proj_target.parameters():
+            p.requires_grad_(False)
 
         self.proj_target.load_state_dict(self.proj_online.state_dict())
 
