@@ -65,12 +65,12 @@ def main():
         dataset_kwargs=dataset_kwargs,
         batch_size_train=TRAIN_BATCH_SIZE,
         batch_size_eval=EVAL_BATCH_SIZE,
-        num_workers=0,
-        pin_memory=False,
+        num_workers=8,
+        pin_memory=True,
         drop_last_train=False,
         drop_last_eval=False,
-        persistent_workers=False,
-        prefetch_factor=None,
+        persistent_workers=True,
+        prefetch_factor=2,
     )
     print(
         f"Dataset loaded {len(dataloaders.train_loader())} train batches and "
