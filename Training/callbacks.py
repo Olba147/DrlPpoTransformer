@@ -156,7 +156,9 @@ class StatsPrinter(Callback):
         self.step += 1
         if self.learn.training and (self.step % self.log_every == 0):
             lr = self.learn.opt.param_groups[0]["lr"] if self.learn.opt else float("nan")
-            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f} lr={lr:.2e} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
+            ema_decay = self.learn.last_ema_decay
+            ema_str = f" ema_decay={ema_decay:.6f}" if ema_decay is not None else ""
+            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f} lr={lr:.2e}{ema_str} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
 
     def after_epoch(self):
         print(f"Epoch {self.learn.epoch+1}/{self.learn.n_epochs} "

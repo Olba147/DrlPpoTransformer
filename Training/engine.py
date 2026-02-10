@@ -66,6 +66,7 @@ class Learner:
         self.epoch_cosine_similarity = float("nan")
         self.epoch_std_ctx = float("nan")
         self.epoch_std_tgt = float("nan")
+        self.last_ema_decay: Optional[float] = None
 
 
     # ---- helpers to call callbacks ----
@@ -135,6 +136,7 @@ class Learner:
                     t = min(1.0, self.global_step / float(self.warmup_steps))
                     decay = self.model.ema_start + t * (self.model.ema_end - self.model.ema_start)
                     self.model.ema_update(decay)
+                    self.last_ema_decay = decay
                     self.global_step += 1
 
 
