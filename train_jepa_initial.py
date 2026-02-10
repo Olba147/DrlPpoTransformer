@@ -19,7 +19,7 @@ DATASET_CONTEXT_LEN = 1024
 DATASET_TARGET_LEN = 48
 
 TRAIN_EPOCHS = 100
-TRAIN_BATCH_SIZE = 128
+TRAIN_BATCH_SIZE = 64
 EVAL_BATCH_SIZE = 256
 LEARNING_RATE = 3e-4
 PATCH_LEN = 8
@@ -55,6 +55,7 @@ dataset_kwargs = {
     "test_split": 0.15,
     "regular_hours_only": True,
     "timeframe": "5min",
+    "tickers": ["AAPL", "AMZN", "QQQ", "AMGN", "CSCO"],
 }
 
 
