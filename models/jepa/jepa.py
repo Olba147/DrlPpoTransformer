@@ -47,8 +47,8 @@ class JEPA(nn.Module):
             self.proj_target.eval()
             z_t = self.proj_target(self.target_enc(X_tgt, T_tgt, asset_id=asset_id))     # [B, D]
         p_c = self.predictor(z_c)                                                        # [B, D]
-        return F.normalize(p_c, dim=-1), F.normalize(z_t, dim=-1), p_c, z_t
-        # return p_c, z_t
+        # return F.normalize(p_c, dim=-1), F.normalize(z_t, dim=-1), p_c, z_t
+        return p_c, z_t
 
     @torch.no_grad()
     def ema_update(self, decay):
