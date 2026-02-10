@@ -10,16 +10,16 @@ from Training.engine import Learner
 from Training.callbacks import PatchingCallback, StatsPrinter, CSVLogger, CheckpointCallback
 from Training.helpers import variance_loss
 
-MODEL_NAME = "jepa_initial2"
+MODEL_NAME = "jepa_initial3"
 
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-DATASET_CONTEXT_LEN = 1048
-DATASET_TARGET_LEN = 96
+DATASET_CONTEXT_LEN = 1024
+DATASET_TARGET_LEN = 48
 
 TRAIN_EPOCHS = 100
-TRAIN_BATCH_SIZE = 64
+TRAIN_BATCH_SIZE = 128
 EVAL_BATCH_SIZE = 256
 LEARNING_RATE = 3e-4
 PATCH_LEN = 8
@@ -29,16 +29,16 @@ CHECKPOINT_EVERY_EPOCHS = 5
 AMP = True
 GRAD_CLIP = 1.0
 
-JEPA_D_MODEL = 192
+JEPA_D_MODEL = 256
 JEPA_N_FEATURES = 9
 JEPA_N_TIME_FEATURES = 2
-JEPA_NHEAD = 3
-JEPA_NUM_LAYERS = 3
-JEPA_DIM_FF = 384
+JEPA_NHEAD = 4
+JEPA_NUM_LAYERS = 4
+JEPA_DIM_FF = 1024
 JEPA_DROPOUT = 0.1
 JEPA_ADD_CLS = True
-JEPA_POOLING = "mean"   # "cls" | "mean"
-JEPA_PRED_LEN = 96
+JEPA_POOLING = "cls"   # "cls" | "mean"
+JEPA_PRED_LEN = 48
 
 EMA_START = 0.99
 EMA_END = 0.999

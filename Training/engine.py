@@ -25,7 +25,9 @@ class Learner:
         device: Optional[torch.device] = None,
         grad_clip: Optional[float] = None,
         amp: bool = False,                  # fp16 autocast
-        start_epoch: int = 0
+        start_epoch: int = 0,
+        warmup_epochs: int = 20,
+        global_step: int = 0
     ):
     
         self.model = model
@@ -38,6 +40,10 @@ class Learner:
         self.grad_clip = grad_clip
         self.amp = amp
         
+        # ema update
+        self.global_step = global_step
+        self.warmup_steps = len(self.train_dl) * warmup_epochs  # 20 epochs worth of steps
+
         # propertios
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
@@ -126,7 +132,10 @@ class Learner:
 
                 # jepa ema update
                 if hasattr(self.model, "ema_update"):
-                    self.model.ema_update(epoch=self.epoch)
+                    t = min(1.0, self.global_step / float(self.warmup_steps))
+                    decay = self.model.ema_start + t * (self.model.ema_end - self.model.ema_start)
+                    self.model.ema_update(decay)
+                    self.global_step += 1
 
 
                 # calculate cosine similarity for each batch for tracking
