@@ -153,7 +153,7 @@ def main():
     # 4) Optimizer
     opt = torch.optim.Adam(
         list(jepa_model.context_enc.parameters())
-        + list(jepa_model.proj_online.parameters())
+        # + list(jepa_model.proj_online.parameters())
         + list(jepa_model.predictor.parameters()),
         lr=LEARNING_RATE,
     )
