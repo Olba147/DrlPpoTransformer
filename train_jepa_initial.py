@@ -42,6 +42,7 @@ JEPA_PRED_LEN = 48
 
 EMA_TAU_MIN = 0.99
 EMA_TAU_MAX   = 0.996
+EMA_WARMUP_EPOCHS = 50
 
 # Loss
 VAR_LOSS = True
@@ -208,7 +209,8 @@ def main():
         start_epoch=epoch,
         var_loss=VAR_LOSS,
         var_loss_gamma=VAR_LOSS_GAMMA,
-        var_loss_weight=VAR_LOSS_WEIGHT
+        var_loss_weight=VAR_LOSS_WEIGHT,
+        warmup_epochs=EMA_WARMUP_EPOCHS
     )
 
     learn.fit(n_epochs=TRAIN_EPOCHS)
