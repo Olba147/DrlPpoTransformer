@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Tuple, Iterable
 import torch
 from torch.utils.data import DataLoader
 from torch.nn import functional as F
+import numpy as np
 
 from Training.callbacks import Callback, CallbackList
 
@@ -80,7 +81,7 @@ class Learner:
         """Cosine schedule for EMA tau"""
         if self.global_step >= self.warmup_steps:
             return self.model.ema_tau_min
-        cos_schedule = 0.5 * (1 + torch.cos(torch.pi * self.global_step / self.warmup_steps))
+        cos_schedule = 0.5 * (1 + np.cos(np.pi * self.global_step / self.warmup_steps))
         self.ema_steps += 1
         return self.model.ema_tau_min + (self.model.ema_tau_max - self.model.ema_tau_min) * cos_schedule
 
