@@ -76,6 +76,14 @@ class Learner:
     def _cb(self, name: str, *args, **kwargs):
         self.cbs._call(name, *args, **kwargs)
 
+    def _get_ema_tau(self):    
+        """Cosine schedule for EMA tau"""
+        if self.global_step >= self.warmup_steps:
+            return self.model.ema_tau_min
+        cos_schedule = 0.5 * (1 + torch.cos(torch.pi * self.global_step / self.warmup_steps))
+        self.ema_steps += 1
+        return self.model.ema_tau_min + (self.model.ema_tau_max - self.model.ema_tau_min) * cos_schedule
+
     # ---- main API ----
     def fit(self, n_epochs: int):
         self.n_epochs = n_epochs
@@ -142,10 +150,9 @@ class Learner:
 
                 # jepa ema update
                 if hasattr(self.model, "ema_update"):
-                    t = min(1.0, self.global_step / float(self.warmup_steps))
-                    decay = self.model.ema_start + t * (self.model.ema_end - self.model.ema_start)
-                    self.model.ema_update(decay)
-                    self.last_ema_decay = decay
+                    t = self._get_ema_tau()
+                    self.model.ema_update(t)
+                    self.last_ema_decay = t
                     self.global_step += 1
 
 

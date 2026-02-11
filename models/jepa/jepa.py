@@ -3,13 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class JEPA(nn.Module):
-    def __init__(self, context_enc, target_enc, d_model, ema_start, ema_end):
+    def __init__(self, context_enc, target_enc, d_model, ema_tau_min, ema_tau_max):
         super().__init__()
         self.context_enc = context_enc
         self.target_enc  = target_enc
         
-        self.ema_start = ema_start
-        self.ema_end   = ema_end
+        self.ema_tau_min = ema_tau_min
+        self.ema_tau_max   = ema_tau_max
 
         self.predictor = nn.Sequential(
             nn.Linear(d_model, 2*d_model),

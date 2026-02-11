@@ -15,11 +15,11 @@ MODEL_NAME = "jepa_initial3"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-DATASET_CONTEXT_LEN = 1024
+DATASET_CONTEXT_LEN = 512
 DATASET_TARGET_LEN = 48
 
 TRAIN_EPOCHS = 100
-TRAIN_BATCH_SIZE = 64
+TRAIN_BATCH_SIZE = 256
 EVAL_BATCH_SIZE = 256
 LEARNING_RATE = 3e-4
 PATCH_LEN = 8
@@ -40,8 +40,8 @@ JEPA_ADD_CLS = True
 JEPA_POOLING = "cls"   # "cls" | "mean"
 JEPA_PRED_LEN = 48
 
-EMA_START = 0.996
-EMA_END   = 0.99
+EMA_TAU_MIN = 0.99
+EMA_TAU_MAX   = 0.996
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
@@ -50,12 +50,11 @@ dataset_kwargs = {
     "split": "train",
     "size": [DATASET_CONTEXT_LEN, DATASET_TARGET_LEN],  # label_len ignored by your __getitem__
     "use_time_features": True,
-    "rolling_window": 100,
+    "rolling_window": 252,
     "train_split": 0.7,
     "test_split": 0.15,
     "regular_hours_only": True,
-    "timeframe": "15min",
-    "tickers": ["AAPL", "AMZN", "QQQ"],
+    "timeframe": "15min"
 }
 
 
