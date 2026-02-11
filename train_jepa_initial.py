@@ -40,7 +40,7 @@ JEPA_ADD_CLS = True
 JEPA_POOLING = "cls"   # "cls" | "mean"
 JEPA_PRED_LEN = 48
 
-EMA_START = 0.99
+EMA_START = 0.95
 EMA_END   = 0.999
 
 dataset_kwargs = {
