@@ -40,8 +40,8 @@ JEPA_ADD_CLS = True
 JEPA_POOLING = "cls"   # "cls" | "mean"
 JEPA_PRED_LEN = 48
 
-EMA_START = 0.95
-EMA_END   = 0.999
+EMA_START = 0.996
+EMA_END   = 0.99
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
