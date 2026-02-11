@@ -11,6 +11,16 @@ class JEPA(nn.Module):
         self.ema_start = ema_start
         self.ema_end   = ema_end
 
+        self.predictor = nn.Sequential(
+            nn.Linear(d_model, 2*d_model),
+            nn.GELU(),
+            nn.Linear(2*d_model, d_model),
+        )
+
+        self.target_enc.load_state_dict(self.context_enc.state_dict())
+        for p in self.target_enc.parameters():
+            p.requires_grad_(False)
+        
         # projector with normalization
         # def make_projector():
         #     return nn.Sequential(
@@ -24,16 +34,10 @@ class JEPA(nn.Module):
         # self.proj_target = make_projector()   # EMA-updated copy
         
         # small predictor split to inject action between layers
-        self.predictor = nn.Sequential(
-            nn.Linear(d_model, 2*d_model),
-            nn.GELU(),
-            nn.Linear(2*d_model, d_model),
-        )
+
 
         # make sure that target encoder is initialized the same as context encoder
-        self.target_enc.load_state_dict(self.context_enc.state_dict())
-        for p in self.target_enc.parameters():
-            p.requires_grad_(False)
+        
         # for p in self.proj_target.parameters():
         #     p.requires_grad_(False)
 
@@ -45,7 +49,7 @@ class JEPA(nn.Module):
         z_c = self.context_enc(X_ctx, T_ctx, asset_id=asset_id)                          # [B, D]
         with torch.no_grad():
             self.target_enc.eval()
-            self.proj_target.eval()
+            # self.proj_target.eval()
             # z_t = self.proj_target(self.target_enc(X_tgt, T_tgt, asset_id=asset_id))     # [B, D]
             z_t = self.target_enc(X_tgt, T_tgt, asset_id=asset_id)                        # [B, D]
         p_c = self.predictor(z_c)                                                        # [B, D]
