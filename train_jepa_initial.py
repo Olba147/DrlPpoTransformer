@@ -15,7 +15,7 @@ MODEL_NAME = "jepa_initial3"
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
-DATASET_CONTEXT_LEN = 1024
+DATASET_CONTEXT_LEN = 512
 DATASET_TARGET_LEN = 48
 
 TRAIN_EPOCHS = 100
