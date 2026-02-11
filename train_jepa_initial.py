@@ -18,14 +18,14 @@ MODEL_NAME = "jepa_initial4"
 DATASET_CONTEXT_LEN = 512
 DATASET_TARGET_LEN = 48
 
-TRAIN_EPOCHS = 100
+TRAIN_EPOCHS = 200
 TRAIN_BATCH_SIZE = 256
 EVAL_BATCH_SIZE = 256
 LEARNING_RATE = 3e-4
 PATCH_LEN = 8
 PATCH_STRIDE = 8
 LOG_EVERY = 500
-CHECKPOINT_EVERY_EPOCHS = 5
+CHECKPOINT_EVERY_EPOCHS = 10
 AMP = True
 GRAD_CLIP = 1.0
 
@@ -191,6 +191,7 @@ def main():
             mode="min",
             every_n_epochs=CHECKPOINT_EVERY_EPOCHS,
             filename_best="best.pt",
+            dont_save_for_epochs=10
         ),
     ]
 

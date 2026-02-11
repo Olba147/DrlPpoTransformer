@@ -218,6 +218,7 @@ class CheckpointCallback(Callback):
         mode: str = "min",           # 'min' or 'max'
         every_n_epochs: Optional[int] = None,
         filename_best: str = "best.pt",
+        dont_save_for_epochs: Optional[int] = 0
     ):
         os.makedirs(dirpath, exist_ok=True)
         self.dir = dirpath
@@ -226,6 +227,7 @@ class CheckpointCallback(Callback):
         self.every_n = every_n_epochs
         self.filename_best = filename_best
         self.best = math.inf if mode == "min" else -math.inf
+        self.dont_save_for_epochs = dont_save_for_epochs
 
     def _is_better(self, current: float) -> bool:
         return current < self.best if self.mode == "min" else current > self.best
@@ -240,7 +242,7 @@ class CheckpointCallback(Callback):
                 return
 
         # Save best
-        if self._is_better(metric):
+        if self._is_better(metric) and self.learn.epoch + 1 > self.dont_save_for_epochs:
             self.best = metric
             path = os.path.join(self.dir, self.filename_best)
             torch.save({"model": self.learn.model.state_dict(),
