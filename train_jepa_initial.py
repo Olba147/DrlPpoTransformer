@@ -116,8 +116,8 @@ def main():
         jepa_context_encoder,
         jepa_target_encoder,
         d_model=JEPA_D_MODEL,
-        ema_start=EMA_START,
-        ema_end=EMA_END
+        ema_tau_min=EMA_TAU_MIN,
+        ema_tau_max=EMA_TAU_MAX
     )
 
     # load model weights from checkpoints/best.pt if exists
