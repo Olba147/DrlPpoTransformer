@@ -55,7 +55,7 @@ def filter_regular_us_hours(dt: pd.Series) -> pd.Series:
     dt_et = dt.dt.tz_convert("America/New_York")
     minutes = dt_et.dt.hour * 60 + dt_et.dt.minute
     is_weekday = dt_et.dt.weekday < 5
-    in_rth = (minutes >= 570) & (minutes < 960)
+    in_rth = (minutes >= 570) & (minutes <= 960)
     return is_weekday & in_rth
 
 

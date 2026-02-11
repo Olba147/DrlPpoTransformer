@@ -20,7 +20,7 @@ DATASET_TARGET_LEN = 48
 
 TRAIN_EPOCHS = 100
 TRAIN_BATCH_SIZE = 256
-EVAL_BATCH_SIZE = 256
+EVAL_BATCH_SIZE = 64
 LEARNING_RATE = 3e-4
 PATCH_LEN = 8
 PATCH_STRIDE = 8
@@ -50,7 +50,7 @@ dataset_kwargs = {
     "split": "train",
     "size": [DATASET_CONTEXT_LEN, DATASET_TARGET_LEN],  # label_len ignored by your __getitem__
     "use_time_features": True,
-    "rolling_window": 252,
+    "rolling_window": 100,
     "train_split": 0.7,
     "test_split": 0.15,
     "regular_hours_only": True,
