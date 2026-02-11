@@ -82,7 +82,6 @@ class Learner:
         if self.global_step >= self.warmup_steps:
             return self.model.ema_tau_min
         cos_schedule = 0.5 * (1 + np.cos(np.pi * self.global_step / self.warmup_steps))
-        self.ema_steps += 1
         return self.model.ema_tau_min + (self.model.ema_tau_max - self.model.ema_tau_min) * cos_schedule
 
     # ---- main API ----
