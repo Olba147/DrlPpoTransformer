@@ -54,8 +54,8 @@ dataset_kwargs = {
     "train_split": 0.7,
     "test_split": 0.15,
     "regular_hours_only": True,
-    "timeframe": "5min",
-    "tickers": ["AAPL", "AMZN", "QQQ", "AMGN", "CSCO"],
+    "timeframe": "15min",
+    "tickers": ["AAPL", "AMZN", "QQQ"],
 }
 
 
