@@ -16,7 +16,7 @@ class JEPA(nn.Module):
             nn.GELU(),
             nn.Linear(2*d_model, 2*d_model),
             nn.GELU(),
-            nn.Linear(d_model, d_model),
+            nn.Linear(2*d_model, d_model),
             nn.LayerNorm(d_model)
         )
 
