@@ -160,16 +160,20 @@ class StatsPrinter(Callback):
             ema_str = f" ema_decay={ema_decay:.6f}" if ema_decay is not None else ""
             mse = self.learn.last_mse_loss
             cos = self.learn.last_cos_loss
+            var = self.learn.last_var_loss
             mse_str = f" mse={mse:.5f}" if mse is not None else ""
             cos_str = f" cos={cos:.5f}" if cos is not None else ""
-            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f}{mse_str}{cos_str} lr={lr:.2e}{ema_str} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
+            var_str = f" var={var:.5f}" if var is not None else ""
+            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f}{mse_str}{cos_str}{var_str} lr={lr:.2e}{ema_str} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
 
     def after_epoch(self):
         print(f"Epoch {self.learn.epoch+1}/{self.learn.n_epochs} "
               f"train_loss={self.learn.epoch_train_loss:.5f} "
               f"train_mse={self.learn.epoch_mse_loss:.5f} "
               f"train_cos={self.learn.epoch_cos_loss:.5f} "
-              f"val_loss={self.learn.epoch_val_loss:.5f}")
+              f"train_var_loss={self.learn.epoch_var_loss:.5f} "
+              f"val_loss={self.learn.epoch_val_loss:.5f}"
+              )
 
 
 class CSVLogger(Callback):

@@ -10,7 +10,7 @@ from Training.engine import Learner
 from Training.callbacks import PatchingCallback, StatsPrinter, CSVLogger, CheckpointCallback
 from Training.helpers import variance_loss
 
-MODEL_NAME = "jepa_initial3"
+MODEL_NAME = "jepa_initial4"
 
 # ------------------------
 # Hyperparameters (edit here)
@@ -42,6 +42,11 @@ JEPA_PRED_LEN = 48
 
 EMA_TAU_MIN = 0.99
 EMA_TAU_MAX   = 0.996
+
+# Loss
+VAR_LOSS = True
+VAR_LOSS_GAMMA = 1.0
+VAR_LOSS_WEIGHT = 0.1
 
 dataset_kwargs = {
     "root_path": r"Data/polygon",
@@ -200,6 +205,9 @@ def main():
         amp=AMP,
         grad_clip=GRAD_CLIP,
         start_epoch=epoch,
+        var_loss=VAR_LOSS,
+        var_loss_gamma=VAR_LOSS_GAMMA,
+        var_loss_weight=VAR_LOSS_WEIGHT
     )
 
     learn.fit(n_epochs=TRAIN_EPOCHS)

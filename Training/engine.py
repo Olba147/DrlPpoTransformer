@@ -28,7 +28,10 @@ class Learner:
         amp: bool = False,                  # fp16 autocast
         start_epoch: int = 0,
         warmup_epochs: int = 20,
-        global_step: int = 0
+        global_step: int = 0,
+        var_loss: bool = False,
+        var_loss_gamma: float = 1.0,
+        var_loss_weight: float = 1.0
     ):
     
         self.model = model
@@ -43,6 +46,11 @@ class Learner:
         # ema update
         self.global_step = global_step
         self.warmup_steps = len(self.train_dl) * warmup_epochs  # 20 epochs worth of steps
+
+        # variance loss
+        self.var_loss = var_loss
+        self.var_loss_gamma = var_loss_gamma
+        self.var_loss_weight = var_loss_weight
 
         # propertios
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,8 +77,10 @@ class Learner:
         self.last_ema_decay: Optional[float] = None
         self.last_mse_loss: Optional[float] = None
         self.last_cos_loss: Optional[float] = None
+        self.last_var_loss: Optional[float] = None
         self.epoch_mse_loss: float = float("nan")
         self.epoch_cos_loss: float = float("nan")
+        self.epoch_var_loss: float = float("nan")
 
 
     # ---- helpers to call callbacks ----
@@ -83,6 +93,19 @@ class Learner:
             return self.model.ema_tau_min
         cos_schedule = 0.5 * (1 + np.cos(np.pi * self.global_step / self.warmup_steps))
         return self.model.ema_tau_min + (self.model.ema_tau_max - self.model.ema_tau_min) * cos_schedule
+    
+    @staticmethod
+    def variance_penalty(z: torch.Tensor, gamma: float = 1.0, eps: float = 1e-4) -> torch.Tensor:
+        """
+        VICReg-style variance hinge penalty.
+        Penalizes dimensions whose batch std < gamma.
+
+        z: [B, D]
+        """
+        if z.dim() != 2:
+            z = z.view(z.size(0), -1)
+        std = torch.sqrt(z.var(dim=0, unbiased=False) + eps)  # [D]
+        return F.relu(gamma - std).mean()
 
     # ---- main API ----
     def fit(self, n_epochs: int):
@@ -108,6 +131,7 @@ class Learner:
         total_loss = 0.0
         mse_sum = 0.0
         cos_sum_loss = 0.0
+        var_sum = 0.0
         n_steps = 0
         cos_sum = 0.0
         std_ctx_sum = 0.0
@@ -133,7 +157,16 @@ class Learner:
                 self._cb("after_pred", pred, batch)
                 mse_loss = F.mse_loss(pred[0], pred[1])
                 cos_loss = 1.0 - F.cosine_similarity(pred[0], pred[1], dim=1).mean()
-                loss = mse_loss + cos_loss
+                
+                if self.var_loss:
+                    var_loss = self.variance_penalty(pred[0], gamma=self.var_loss_gamma)
+                    var_loss = self.var_loss_weight * var_loss
+                    self.last_var_loss = float(var_loss.detach().item())
+                else:
+                    var_loss = mse_loss.new_tensor(0.0)
+
+                loss = mse_loss + cos_loss + var_loss
+
                 self.last_mse_loss = float(mse_loss.detach().item())
                 self.last_cos_loss = float(cos_loss.detach().item())
                 self._cb("after_loss", loss, batch)
@@ -170,6 +203,7 @@ class Learner:
             total_loss += loss.detach().item()
             mse_sum += mse_loss.detach().item()
             cos_sum_loss += cos_loss.detach().item()
+            var_sum += var_loss.detach().item()
             n_steps += 1
             self._cb("after_batch", batch)
 
@@ -182,6 +216,7 @@ class Learner:
             self.epoch_std_tgt = std_tgt_sum / denom
             self.epoch_mse_loss = mse_sum / denom
             self.epoch_cos_loss = cos_sum_loss / denom
+            self.epoch_var_loss = var_sum / denom
         else:
             self.epoch_val_loss = avg_loss
 
