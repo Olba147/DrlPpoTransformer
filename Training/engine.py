@@ -34,7 +34,6 @@ class Learner:
         self.train_dl = train_dl
         self.val_dl = val_dl
         self.opt = opt
-        self.loss_func = loss_func
         self.cbs = cbs
         self.device = device
         self.grad_clip = grad_clip
@@ -67,6 +66,10 @@ class Learner:
         self.epoch_std_ctx = float("nan")
         self.epoch_std_tgt = float("nan")
         self.last_ema_decay: Optional[float] = None
+        self.last_mse_loss: Optional[float] = None
+        self.last_cos_loss: Optional[float] = None
+        self.epoch_mse_loss: float = float("nan")
+        self.epoch_cos_loss: float = float("nan")
 
 
     # ---- helpers to call callbacks ----
@@ -95,6 +98,8 @@ class Learner:
         self._cb("before_train" if train else "before_validate")
 
         total_loss = 0.0
+        mse_sum = 0.0
+        cos_sum_loss = 0.0
         n_steps = 0
         cos_sum = 0.0
         std_ctx_sum = 0.0
@@ -118,7 +123,11 @@ class Learner:
                 # If your model signature is different, adapt here.
                 pred = self.model(x_context, t_context, x_target, t_target, asset_id=asset_id)
                 self._cb("after_pred", pred, batch)
-                loss = self.loss_func(pred[0], pred[1])
+                mse_loss = F.mse_loss(pred[0], pred[1])
+                cos_loss = 1.0 - F.cosine_similarity(pred[0], pred[1], dim=1).mean()
+                loss = mse_loss + cos_loss
+                self.last_mse_loss = float(mse_loss.detach().item())
+                self.last_cos_loss = float(cos_loss.detach().item())
                 self._cb("after_loss", loss, batch)
 
             if train:
@@ -152,6 +161,8 @@ class Learner:
                 self._cb("after_step")
 
             total_loss += loss.detach().item()
+            mse_sum += mse_loss.detach().item()
+            cos_sum_loss += cos_loss.detach().item()
             n_steps += 1
             self._cb("after_batch", batch)
 
@@ -162,6 +173,8 @@ class Learner:
             self.epoch_cosine_similarity = cos_sum / denom
             self.epoch_std_ctx = std_ctx_sum / denom
             self.epoch_std_tgt = std_tgt_sum / denom
+            self.epoch_mse_loss = mse_sum / denom
+            self.epoch_cos_loss = cos_sum_loss / denom
         else:
             self.epoch_val_loss = avg_loss
 
