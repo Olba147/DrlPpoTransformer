@@ -208,7 +208,7 @@ class Dataset_Finance_MultiAsset(Dataset):
             for t in self.tickers:
                 yield t, os.path.join(path, f"{t}{self.file_suffix}")
         else:
-            for fname in os.listdir(path):
+            for fname in sorted(os.listdir(path)):
                 if fname.endswith(self.file_suffix):
                     asset_id = os.path.splitext(fname)[0]
                     yield asset_id, os.path.join(path, fname)
