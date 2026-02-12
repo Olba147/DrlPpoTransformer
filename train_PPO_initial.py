@@ -34,12 +34,12 @@ N_ENVS = 16
 
 LEARNING_RATE = 5e-5
 PPO_EPOCHS = 2
-BATCH_SIZE = 512
+BATCH_SIZE = 256
 GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
 
-ENT_COEF_START = 0.01
+ENT_COEF_START = 0.0
 ENT_COEF_END = 0.0
 ENT_WARMUP_FRACTION = 0.3
 
@@ -56,7 +56,7 @@ CHECKPOINT_EVERY_STEPS = 50_000
 
 TRANSACTION_COST = 0 # only for initial training to support exploration
 INCLUDE_WEALTH = False
-REWARD_SCALE = 1.0
+REWARD_SCALE = 10.0
 TICKER_LIST_PATH = "logs/selected_tickers.txt"
 
 dataset_kwargs = {
