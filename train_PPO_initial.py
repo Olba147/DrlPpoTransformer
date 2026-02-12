@@ -20,6 +20,9 @@ from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallbac
 
 MODEL_NAME = "jepa_ppo_intial5_finetune2"
 JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial5"
+PPO_CHECKPOINT_DIR = f"checkpoints/{MODEL_NAME}"
+RESUME_PATH = None  # set to a specific .zip to resume
+AUTO_RESUME = True  # if True and RESUME_PATH is None, try latest checkpoint in PPO_CHECKPOINT_DIR
 
 # ------------------------
 # Hyperparameters (edit here)
@@ -85,6 +88,18 @@ def make_env(dataset, episode_len):
         allow_short=True,
         include_wealth=INCLUDE_WEALTH,
     )
+
+def get_latest_checkpoint(dir_path: str) -> str | None:
+    if not os.path.isdir(dir_path):
+        return None
+    ckpts = []
+    for fname in os.listdir(dir_path):
+        if fname.startswith("ppo_") and fname.endswith("_steps.zip"):
+            ckpts.append(os.path.join(dir_path, fname))
+    if not ckpts:
+        return None
+    ckpts.sort(key=lambda p: os.path.getmtime(p))
+    return ckpts[-1]
 
 def main():
     print("Loading datasets...")
@@ -167,27 +182,45 @@ def main():
         net_arch=dict(pi=[256, 256], vf=[256, 256]),
     )
 
-    model = PPOWithJEPA(
-        policy="MultiInputPolicy",
-        env=train_env,
-        learning_rate=LEARNING_RATE,
-        n_steps=ROLLOUT_LENGTH_STEPS,
-        batch_size=BATCH_SIZE,
-        n_epochs=PPO_EPOCHS,
-        gamma=GAMMA,
-        gae_lambda=GAE_LAMBDA,
-        clip_range=CLIP_RANGE,
-        ent_coef=ENT_COEF_START,
-        vf_coef=VF_COEF,
-        max_grad_norm=MAX_GRAD_NORM,
-        target_kl=TARGET_KL,
-        update_jepa=UPDATE_JEPA,
-        jepa_coef=JEPA_LOSS_COEF,
-        policy_kwargs=policy_kwargs,
-        device=device,
-        verbose=1,
-        tensorboard_log="logs",
-    )
+    resume_path = RESUME_PATH
+    if resume_path is None and AUTO_RESUME:
+        resume_path = get_latest_checkpoint(PPO_CHECKPOINT_DIR)
+        if resume_path:
+            print(f"Auto-resume from latest PPO checkpoint: {resume_path}")
+
+    if resume_path and os.path.exists(resume_path):
+        print(f"Resuming PPO from {resume_path}")
+        model = PPOWithJEPA.load(
+            resume_path,
+            env=train_env,
+            device=device,
+            custom_objects={"policy_kwargs": policy_kwargs},
+        )
+        model.tensorboard_log = "logs"
+        model.update_jepa = UPDATE_JEPA
+        model.jepa_coef = JEPA_LOSS_COEF
+    else:
+        model = PPOWithJEPA(
+            policy="MultiInputPolicy",
+            env=train_env,
+            learning_rate=LEARNING_RATE,
+            n_steps=ROLLOUT_LENGTH_STEPS,
+            batch_size=BATCH_SIZE,
+            n_epochs=PPO_EPOCHS,
+            gamma=GAMMA,
+            gae_lambda=GAE_LAMBDA,
+            clip_range=CLIP_RANGE,
+            ent_coef=ENT_COEF_START,
+            vf_coef=VF_COEF,
+            max_grad_norm=MAX_GRAD_NORM,
+            target_kl=TARGET_KL,
+            update_jepa=UPDATE_JEPA,
+            jepa_coef=JEPA_LOSS_COEF,
+            policy_kwargs=policy_kwargs,
+            device=device,
+            verbose=1,
+            tensorboard_log="logs",
+        )
 
     class JEPACheckpoint(BaseCallback):
         def __init__(self, jepa_model: JEPA, save_dir: str, every_n_steps: int):
@@ -233,7 +266,7 @@ def main():
         ),
         CheckpointCallback(
             save_freq=CHECKPOINT_EVERY_STEPS,
-            save_path=f"checkpoints/{MODEL_NAME}",
+            save_path=PPO_CHECKPOINT_DIR,
             name_prefix="ppo",
         ),
         EvalCallback(
@@ -256,7 +289,12 @@ def main():
         ),
     ]
 
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callbacks)
+    model.learn(
+        total_timesteps=TOTAL_TIMESTEPS,
+        callback=callbacks,
+        reset_num_timesteps=False,
+        tb_log_name=MODEL_NAME,
+    )
 
 
 if __name__ == "__main__":
