@@ -41,7 +41,7 @@ JEPA_POOLING = "cls"   # "cls" | "mean"
 JEPA_PRED_LEN = 48
 
 EMA_TAU_MIN = 0.99
-EMA_TAU_MAX   = 0.996
+EMA_TAU_MAX   = 0.999
 EMA_WARMUP_EPOCHS = 50
 
 # Loss

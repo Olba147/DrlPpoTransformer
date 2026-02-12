@@ -46,6 +46,7 @@ class Learner:
         # ema update
         self.global_step = global_step
         self.warmup_steps = len(self.train_dl) * warmup_epochs  # 20 epochs worth of steps
+        self.ema_arr = torch.linspace(self.model.ema_tau_min, self.model.ema_tau_max, self.warmup_steps)
 
         # variance loss
         self.var_loss = var_loss
@@ -89,10 +90,10 @@ class Learner:
 
     def _get_ema_tau(self):    
         """Cosine schedule for EMA tau"""
-        if self.global_step >= self.warmup_steps:
-            return self.model.ema_tau_min
-        cos_schedule = 0.5 * (1 + np.cos(np.pi * self.global_step / self.warmup_steps))
-        return self.model.ema_tau_min + (self.model.ema_tau_max - self.model.ema_tau_min) * cos_schedule
+        if self.global_step < self.warmup_steps:
+            return self.ema_arr[self.global_step]
+        else:
+            return self.model.ema_tau_max
     
     @staticmethod
     def variance_penalty(z: torch.Tensor, gamma: float = 1.0, eps: float = 1e-4) -> torch.Tensor:
