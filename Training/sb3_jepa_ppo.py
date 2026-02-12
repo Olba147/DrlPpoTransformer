@@ -158,8 +158,14 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         else:
             if asset_feat.dim() == 0:
                 asset_feat = asset_feat.unsqueeze(0)
-            # If already one-hot (from SB3 preprocessing), keep as-is.
-            if asset_feat.dim() == 2 and asset_feat.shape[1] == self.asset_dim:
+            if asset_feat.dim() == 1:
+                # SB3 may flatten one-hot to 1D; reshape if it matches batch*asset_dim.
+                if asset_feat.numel() == z_t.size(0) * self.asset_dim:
+                    asset_feat = asset_feat.view(z_t.size(0), self.asset_dim).float()
+                else:
+                    asset_idx = asset_feat.long().view(-1)
+                    asset_feat = F.one_hot(asset_idx, num_classes=self.asset_dim).float()
+            elif asset_feat.dim() == 2 and asset_feat.shape[1] == self.asset_dim:
                 asset_feat = asset_feat.float()
             else:
                 asset_idx = asset_feat.long().view(-1)
