@@ -21,7 +21,7 @@ class Learner:
         train_dl: DataLoader,
         val_dl: DataLoader,
         opt: Any,                                # callable(params, lr) -> optimizer
-        loss_func: Any = torch.nn.MSELoss(reduction="mean"),         # callable(pred, batch) -> loss tensor
+        loss_func: Any = torch.nn.SmoothL1Loss(reduction="mean"),         # callable(pred, batch) -> loss tensor
         cbs: Optional[List[Callback]] = None,
         device: Optional[torch.device] = None,
         grad_clip: Optional[float] = None,
@@ -38,6 +38,7 @@ class Learner:
         self.train_dl = train_dl
         self.val_dl = val_dl
         self.opt = opt
+        self.loss_func = loss_func
         self.cbs = cbs
         self.device = device
         self.grad_clip = grad_clip
@@ -76,11 +77,9 @@ class Learner:
         self.epoch_std_ctx = float("nan")
         self.epoch_std_tgt = float("nan")
         self.last_ema_decay: Optional[float] = None
-        self.last_mse_loss: Optional[float] = None
-        self.last_cos_loss: Optional[float] = None
+        self.last_l1_loss: Optional[float] = None
         self.last_var_loss: Optional[float] = None
-        self.epoch_mse_loss: float = float("nan")
-        self.epoch_cos_loss: float = float("nan")
+        self.epoch_l1_loss: float = float("nan")
         self.epoch_var_loss: float = float("nan")
 
 
@@ -130,8 +129,7 @@ class Learner:
         self._cb("before_train" if train else "before_validate")
 
         total_loss = 0.0
-        mse_sum = 0.0
-        cos_sum_loss = 0.0
+        l1_sum = 0.0
         var_sum = 0.0
         n_steps = 0
         cos_sum = 0.0
@@ -156,20 +154,18 @@ class Learner:
                 # If your model signature is different, adapt here.
                 pred = self.model(x_context, t_context, x_target, t_target, asset_id=asset_id)
                 self._cb("after_pred", pred, batch)
-                mse_loss = F.mse_loss(pred[0], pred[1])
-                cos_loss = 1.0 - F.cosine_similarity(pred[0], pred[1], dim=1).mean()
+                l1_loss = self.loss_func(pred[0], pred[1])
                 
                 if self.var_loss:
                     var_loss = self.variance_penalty(pred[0], gamma=self.var_loss_gamma)
                     var_loss = self.var_loss_weight * var_loss
                     self.last_var_loss = float(var_loss.detach().item())
                 else:
-                    var_loss = mse_loss.new_tensor(0.0)
+                    var_loss = 0.0
 
-                loss = mse_loss + cos_loss + var_loss
+                loss = l1_loss + var_loss
 
-                self.last_mse_loss = float(mse_loss.detach().item())
-                self.last_cos_loss = float(cos_loss.detach().item())
+                self.last_l1_loss = float(l1_loss.detach().item())
                 self._cb("after_loss", loss, batch)
 
             if train:
@@ -202,8 +198,7 @@ class Learner:
                 self._cb("after_step")
 
             total_loss += loss.detach().item()
-            mse_sum += mse_loss.detach().item()
-            cos_sum_loss += cos_loss.detach().item()
+            l1_sum += l1_loss.detach().item()
             var_sum += var_loss.detach().item()
             n_steps += 1
             self._cb("after_batch", batch)
@@ -215,8 +210,7 @@ class Learner:
             self.epoch_cosine_similarity = cos_sum / denom
             self.epoch_std_ctx = std_ctx_sum / denom
             self.epoch_std_tgt = std_tgt_sum / denom
-            self.epoch_mse_loss = mse_sum / denom
-            self.epoch_cos_loss = cos_sum_loss / denom
+            self.epoch_l1_loss = l1_sum / denom
             self.epoch_var_loss = var_sum / denom
         else:
             self.epoch_val_loss = avg_loss
