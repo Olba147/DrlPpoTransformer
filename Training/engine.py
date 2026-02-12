@@ -161,7 +161,7 @@ class Learner:
                     var_loss = self.var_loss_weight * var_loss
                     self.last_var_loss = float(var_loss.detach().item())
                 else:
-                    var_loss = 0.0
+                    var_loss = torch.tensor(0.0, device=pred[0].device)
 
                 loss = l1_loss + var_loss
 
