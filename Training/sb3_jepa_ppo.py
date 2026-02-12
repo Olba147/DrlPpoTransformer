@@ -228,6 +228,7 @@ class PPOWithJEPA(PPO):
         jepa_losses = []
         jepa_pred_stds = []
         jepa_tgt_stds = []
+        action_mean_vals = []
         weighted_entropy_losses = []
         weighted_value_losses = []
         weighted_jepa_losses = []
@@ -245,6 +246,10 @@ class PPOWithJEPA(PPO):
 
                 values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
                 values = values.flatten()
+                # Log mean of action distribution when available (continuous actions)
+                dist = self.policy.get_distribution(rollout_data.observations)
+                if hasattr(dist, "mean"):
+                    action_mean_vals.append(dist.mean.mean().detach().cpu().item())
 
                 # Normalize advantage
                 advantages = rollout_data.advantages
@@ -352,6 +357,8 @@ class PPOWithJEPA(PPO):
         self.logger.record("train/loss", loss.item())
         self.logger.record("train/explained_variance", explained_var)
         self.logger.record("train/reward_std", reward_std)
+        if action_mean_vals:
+            self.logger.record("train/action_mean", np.mean(action_mean_vals))
         if jepa_losses:
             self.logger.record("train/jepa_loss", np.mean(jepa_losses))
         if weighted_jepa_losses:

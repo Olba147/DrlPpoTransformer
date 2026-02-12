@@ -18,18 +18,18 @@ from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback
 
-MODEL_NAME = "jepa_ppo_intial5_finetune2"
+MODEL_NAME = "jepa_ppo_intial5_finetune3"
 JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial5"
 PPO_CHECKPOINT_DIR = f"checkpoints/{MODEL_NAME}"
 RESUME_PATH = None  # set to a specific .zip to resume
-AUTO_RESUME = True  # if True and RESUME_PATH is None, try latest checkpoint in PPO_CHECKPOINT_DIR
+AUTO_RESUME = False  # if True and RESUME_PATH is None, try latest checkpoint in PPO_CHECKPOINT_DIR
 
 # ------------------------
 # Hyperparameters (edit here)
 # ------------------------
 EPISODE_LENGTH_STEPS = 2048
 ROLLOUT_LENGTH_STEPS = 2048
-TOTAL_TIMESTEPS = 6_000_000
+TOTAL_TIMESTEPS = 20_000_000
 N_ENVS = 16
 
 LEARNING_RATE = 5e-5
@@ -39,7 +39,7 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
 
-ENT_COEF_START = 0.0
+ENT_COEF_START = 0.01
 ENT_COEF_END = 0.0
 ENT_WARMUP_FRACTION = 0.3
 
