@@ -7,7 +7,7 @@ import random
 from train_jepa_initial import DATASET_CONTEXT_LEN, DATASET_TARGET_LEN
 from train_jepa_initial import PATCH_LEN, PATCH_STRIDE, JEPA_D_MODEL, JEPA_N_FEATURES, JEPA_N_TIME_FEATURES, JEPA_NHEAD, JEPA_NUM_LAYERS
 from train_jepa_initial import JEPA_DIM_FF, JEPA_DROPOUT, JEPA_POOLING, JEPA_PRED_LEN
-from train_jepa_initial import EMA_TAU_MAX, EMA_TAU_MIN, EMA_WARMUP_STEPS
+from train_jepa_initial import EMA_TAU_MAX, EMA_TAU_MIN, EMA_WARMUP_EPOCHS
 
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
