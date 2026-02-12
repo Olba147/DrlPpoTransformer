@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import torch
-import random
 
 # import jepa params
 from train_jepa_initial import DATASET_CONTEXT_LEN, DATASET_TARGET_LEN
@@ -55,8 +54,6 @@ CHECKPOINT_EVERY_STEPS = 50_000
 TRANSACTION_COST = 0 # only for initial training to support exploration
 INCLUDE_WEALTH = False
 REWARD_SCALE = 1.0
-NUM_RANDOM_TICKERS = 10
-RANDOM_TICKER_SEED = None  # set int for reproducibility
 TICKER_LIST_PATH = "logs/selected_tickers.txt"
 
 dataset_kwargs = {
@@ -64,27 +61,14 @@ dataset_kwargs = {
     "data_path": r"data_raw_1m",
     "start_date": None,
     "split": "train",
-    "size": [1024, 48],
+    "size": [DATASET_CONTEXT_LEN, DATASET_TARGET_LEN],
     "use_time_features": True,
     "rolling_window": 252,
     "train_split": 0.7,
     "test_split": 0.15,
     "regular_hours_only": True,
-    "timeframe": "5min",
+    "timeframe": "15min",
 }
-
-def pick_random_tickers(root_path: str, data_path: str, num: int, seed: int | None = None) -> list:
-    path = os.path.join(root_path, data_path)
-    if seed is not None:
-        random.seed(seed)
-    tickers = []
-    if os.path.isdir(path):
-        for fname in os.listdir(path):
-            if fname.endswith(".parquet"):
-                tickers.append(os.path.splitext(fname)[0])
-    if len(tickers) < num:
-        raise RuntimeError(f"Not enough tickers to sample {num} from {path}. Found {len(tickers)}.")
-    return random.sample(tickers, num)
 
 def save_tickers(tickers: list, path: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -104,15 +88,7 @@ def make_env(dataset, episode_len):
 
 def main():
     print("Loading datasets...")
-    tickers = pick_random_tickers(
-        root_path=dataset_kwargs["root_path"],
-        data_path=dataset_kwargs["data_path"],
-        num=NUM_RANDOM_TICKERS,
-        seed=RANDOM_TICKER_SEED,
-    )
-    print(f"Selected tickers: {tickers}")
-    dataset_kwargs["tickers"] = tickers
-    save_tickers(tickers, TICKER_LIST_PATH)
+    print("Using all available tickers (same as JEPA pretrain).")
     train_dataset = Dataset_Finance_MultiAsset(**dataset_kwargs)
     val_dataset = Dataset_Finance_MultiAsset(**{**dataset_kwargs, "split": "val"})
     num_assets = len(train_dataset.asset_ids)
