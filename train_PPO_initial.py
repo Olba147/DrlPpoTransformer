@@ -18,7 +18,7 @@ from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback
 
-MODEL_NAME = "jepa_ppo_intial5_finetune"
+MODEL_NAME = "jepa_ppo_intial5_finetune2"
 JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial5"
 
 # ------------------------
@@ -36,8 +36,8 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95
 CLIP_RANGE = 0.2
 
-ENT_COEF_START = 0.001
-ENT_COEF_END = 0.001
+ENT_COEF_START = 0.0
+ENT_COEF_END = 0.0
 ENT_WARMUP_FRACTION = 0.3
 
 VF_COEF = 0.5
