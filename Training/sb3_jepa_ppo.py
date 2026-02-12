@@ -161,6 +161,8 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
                 asset_feat = asset_feat.view(1, self.asset_dim)
             elif asset_feat.dim() == 2:
                 pass
+            elif asset_feat.dim() == 3 and asset_feat.shape[1] == 1 and asset_feat.shape[2] == self.asset_dim:
+                asset_feat = asset_feat.squeeze(1)
             else:
                 raise ValueError(f"Unexpected asset_id shape {tuple(asset_feat.shape)} for asset_dim {self.asset_dim}")
 
