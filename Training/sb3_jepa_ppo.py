@@ -156,20 +156,15 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         if asset_feat is None or self.asset_dim == 0:
             asset_feat = th.zeros((z_t.size(0), 0), device=z_t.device)
         else:
+            bsz = z_t.size(0)
             if asset_feat.dim() == 0:
-                asset_feat = asset_feat.unsqueeze(0)
-            if asset_feat.dim() == 1:
-                # SB3 may flatten one-hot to 1D; reshape if it matches batch*asset_dim.
-                if asset_feat.numel() == z_t.size(0) * self.asset_dim:
-                    asset_feat = asset_feat.view(z_t.size(0), self.asset_dim).float()
-                else:
-                    asset_idx = asset_feat.long().view(-1)
-                    asset_feat = F.one_hot(asset_idx, num_classes=self.asset_dim).float()
-            elif asset_feat.dim() == 2 and asset_feat.shape[1] == self.asset_dim:
-                asset_feat = asset_feat.float()
+                asset_feat = asset_feat.view(1)
+            if asset_feat.dim() == 1 and asset_feat.numel() == bsz:
+                asset_idx = asset_feat.long()
             else:
-                asset_idx = asset_feat.long().view(-1)
-                asset_feat = F.one_hot(asset_idx, num_classes=self.asset_dim).float()
+                asset_feat = asset_feat.view(bsz, -1)
+                asset_idx = th.argmax(asset_feat, dim=1).long()
+            asset_feat = F.one_hot(asset_idx, num_classes=self.asset_dim).float()
 
         return th.cat([z_t, w_prev, wealth_feats, asset_feat], dim=-1)
 
