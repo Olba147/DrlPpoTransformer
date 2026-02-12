@@ -43,11 +43,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         self.target_ratio = target_ratio
         self.target_len = target_len
 
-        # Ensure target encoder/projection are not updated by SGD
-        for param in self.jepa_model.target_enc.parameters():
-            param.requires_grad = False
-        for param in self.jepa_model.proj_target.parameters():
-            param.requires_grad = False
 
         self.last_jepa_loss: Optional[th.Tensor] = None
         self.last_pred_std: Optional[float] = None
@@ -339,7 +334,7 @@ class PPOWithJEPA(PPO):
         if self.update_jepa and hasattr(self.policy, "features_extractor"):
             fx = self.policy.features_extractor
             if hasattr(fx, "jepa_model"):
-                fx.jepa_model.ema_update(self._n_updates)
+                fx.jepa_model.ema_update(fx.jepa_model.ema_tau_max)
 
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
         reward_std = float(np.std(self.rollout_buffer.rewards)) if self.rollout_buffer.rewards.size else 0.0

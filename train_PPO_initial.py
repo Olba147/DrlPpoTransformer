@@ -7,7 +7,7 @@ import random
 from train_jepa_initial import DATASET_CONTEXT_LEN, DATASET_TARGET_LEN
 from train_jepa_initial import PATCH_LEN, PATCH_STRIDE, JEPA_D_MODEL, JEPA_N_FEATURES, JEPA_N_TIME_FEATURES, JEPA_NHEAD, JEPA_NUM_LAYERS
 from train_jepa_initial import JEPA_DIM_FF, JEPA_DROPOUT, JEPA_POOLING, JEPA_PRED_LEN
-from train_jepa_initial import EMA_START, EMA_END, EMA_EPOCHS
+from train_jepa_initial import EMA_TAU_MAX, EMA_TAU_MIN, EMA_WARMUP_STEPS
 
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
@@ -19,8 +19,8 @@ from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback
 
-MODEL_NAME = "jepa_ppo3_emptry_start"
-JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial3"
+MODEL_NAME = "jepa_ppo_intial5_finetune"
+JEPA_CHECKPOINT_DIR = "checkpoints/jepa_initial5"
 
 # ------------------------
 # Hyperparameters (edit here)
@@ -30,7 +30,7 @@ ROLLOUT_LENGTH_STEPS = 2048
 TOTAL_TIMESTEPS = 6_000_000
 N_ENVS = 16
 
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-5
 PPO_EPOCHS = 2
 BATCH_SIZE = 512
 GAMMA = 0.99
@@ -156,9 +156,8 @@ def main():
         jepa_context_encoder,
         jepa_target_encoder,
         d_model=JEPA_D_MODEL,
-        ema_start=EMA_START,
-        ema_end=EMA_END,
-        n_epochs=EMA_EPOCHS,
+        ema_tau_min=EMA_TAU_MIN,
+        ema_tau_max=EMA_TAU_MAX
     )
 
     checkpoint_path = os.path.join(JEPA_CHECKPOINT_DIR, "best.pt")
