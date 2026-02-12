@@ -152,19 +152,17 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         if wealth_feats.dim() == 1:
             wealth_feats = wealth_feats.unsqueeze(0)
 
-        asset_feat = observations.get("asset_id", None)
-        if asset_feat is None or self.asset_dim == 0:
+        asset_raw = observations.get("asset_id", None)
+        if asset_raw is None or self.asset_dim == 0:
             asset_feat = th.zeros((z_t.size(0), 0), device=z_t.device)
         else:
-            bsz = z_t.size(0)
-            if asset_feat.dim() == 0:
-                asset_feat = asset_feat.view(1)
-            if asset_feat.dim() == 1 and asset_feat.numel() == bsz:
-                asset_idx = asset_feat.long()
+            asset_feat = asset_raw
+            if asset_feat.dim() == 1:
+                asset_feat = asset_feat.view(1, self.asset_dim)
+            elif asset_feat.dim() == 2:
+                pass
             else:
-                asset_feat = asset_feat.view(bsz, -1)
-                asset_idx = th.argmax(asset_feat, dim=1).long()
-            asset_feat = F.one_hot(asset_idx, num_classes=self.asset_dim).float()
+                raise ValueError(f"Unexpected asset_id shape {tuple(asset_feat.shape)} for asset_dim {self.asset_dim}")
 
         return th.cat([z_t, w_prev, wealth_feats, asset_feat], dim=-1)
 
