@@ -10,7 +10,7 @@ from Training.engine import Learner
 from Training.callbacks import PatchingCallback, StatsPrinter, CSVLogger, CheckpointCallback
 from Training.helpers import variance_loss
 
-MODEL_NAME = "jepa_initial5"
+MODEL_NAME = "jepa_initial6"
 
 # ------------------------
 # Hyperparameters (edit here)
