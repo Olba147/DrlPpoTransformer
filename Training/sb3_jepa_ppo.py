@@ -32,7 +32,14 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
     ) -> None:
         w_prev_dim = observation_space["w_prev"].shape[0] if "w_prev" in observation_space.spaces else 0
         wealth_dim = observation_space["wealth_feats"].shape[0] if "wealth_feats" in observation_space.spaces else 0
-        features_dim = embedding_dim + w_prev_dim + wealth_dim
+        asset_dim = 0
+        if "asset_id" in observation_space.spaces:
+            asset_space = observation_space["asset_id"]
+            if isinstance(asset_space, spaces.Discrete):
+                asset_dim = int(asset_space.n)
+            else:
+                asset_dim = int(np.prod(asset_space.shape))
+        features_dim = embedding_dim + w_prev_dim + wealth_dim + asset_dim
         super().__init__(observation_space, features_dim=features_dim)
 
         self.jepa_model = jepa_model
@@ -42,6 +49,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         self.use_obs_targets = use_obs_targets
         self.target_ratio = target_ratio
         self.target_len = target_len
+        self.asset_dim = asset_dim
 
 
         self.last_jepa_loss: Optional[th.Tensor] = None
@@ -144,7 +152,20 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         if wealth_feats.dim() == 1:
             wealth_feats = wealth_feats.unsqueeze(0)
 
-        return th.cat([z_t, w_prev, wealth_feats], dim=-1)
+        asset_feat = observations.get("asset_id", None)
+        if asset_feat is None or self.asset_dim == 0:
+            asset_feat = th.zeros((z_t.size(0), 0), device=z_t.device)
+        else:
+            if asset_feat.dim() == 0:
+                asset_feat = asset_feat.unsqueeze(0)
+            # If already one-hot (from SB3 preprocessing), keep as-is.
+            if asset_feat.dim() == 2 and asset_feat.shape[1] == self.asset_dim:
+                asset_feat = asset_feat.float()
+            else:
+                asset_idx = asset_feat.long().view(-1)
+                asset_feat = F.one_hot(asset_idx, num_classes=self.asset_dim).float()
+
+        return th.cat([z_t, w_prev, wealth_feats, asset_feat], dim=-1)
 
 
 class PPOWithJEPA(PPO):
