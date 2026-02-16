@@ -29,7 +29,7 @@
   "env": {
     "episode_length_steps": 1024,
     "n_envs": 8,
-    "transaction_cost": 0.0,
+    "transaction_cost": 0.002,
     "include_wealth": true,
     "reward_scale": 1.0,
     "allow_short": true,
@@ -46,7 +46,7 @@
     "clip_range": 0.2,
     "ent_coef_start": 0.001,
     "ent_coef_end": 0.0001,
-    "ent_warmup_fraction": 0.2,
+    "ent_warmup_fraction": 0.3,
     "vf_coef": 0.7,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
