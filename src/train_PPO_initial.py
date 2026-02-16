@@ -1,0 +1,349 @@
+import argparse
+import os
+
+import numpy as np
+import torch
+import copy
+
+from config.config_utils import load_json_config
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+from stable_baselines3.common.vec_env import SubprocVecEnv
+
+from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
+from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback, RewardEvalCallback
+from Training.ppo_env import GymTradingEnv
+from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
+from models.jepa.jepa import JEPA
+from models.time_series.patchTransformer import PatchTSTEncoder
+
+DEFAULT_CONFIG_PATH = "configs/ppo_jepa_train.json"
+
+
+def _build_dataset_kwargs(cfg: dict) -> dict:
+    dataset_cfg = cfg["dataset"]
+    return {
+        "root_path": dataset_cfg["root_path"],
+        "data_path": dataset_cfg["data_path"],
+        "start_date": dataset_cfg.get("start_date"),
+        "split": dataset_cfg.get("split", "train"),
+        "size": [dataset_cfg["context_len"], dataset_cfg["target_len"]],
+        "use_time_features": dataset_cfg.get("use_time_features", True),
+        "rolling_window": dataset_cfg["rolling_window"],
+        "train_split": dataset_cfg["train_split"],
+        "test_split": dataset_cfg["test_split"],
+        "tickers": dataset_cfg.get("tickers"),
+        "regular_hours_only": dataset_cfg.get("regular_hours_only", True),
+        "timeframe": dataset_cfg.get("timeframe", "15min"),
+    }
+
+
+def _load_tickers(path: str) -> list | None:
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        tickers = [line.strip() for line in f if line.strip()]
+    return tickers or None
+
+
+def _load_asset_universe_from_path(path: str | None) -> list | None:
+    if not path:
+        return None
+    return _load_tickers(path)
+
+
+def make_env(
+    dataset,
+    episode_len,
+    transaction_cost: float,
+    reward_scale: float,
+    include_wealth: bool,
+    allow_short: bool,
+    action_mode: str,
+):
+    return lambda: GymTradingEnv(
+        dataset,
+        episode_len=episode_len,
+        transaction_cost=transaction_cost,
+        reward_scale=reward_scale,
+        allow_short=allow_short,
+        action_mode=action_mode,
+        include_wealth=include_wealth,
+    )
+
+
+def get_latest_checkpoint(dir_path: str) -> str | None:
+    if not os.path.isdir(dir_path):
+        return None
+    ckpts = []
+    for fname in os.listdir(dir_path):
+        if fname.startswith("ppo_") and fname.endswith("_steps.zip"):
+            ckpts.append(os.path.join(dir_path, fname))
+    if not ckpts:
+        return None
+    ckpts.sort(key=lambda p: os.path.getmtime(p))
+    return ckpts[-1]
+
+
+def main(config_path: str | None = None):
+    cfg = load_json_config(config_path, DEFAULT_CONFIG_PATH, __file__)
+
+    model_name = cfg["model_name"]
+    paths_cfg = cfg["paths"]
+    resume_cfg = cfg["resume"]
+    dataset_cfg = cfg["dataset"]
+    env_cfg = cfg["env"]
+    ppo_cfg = cfg["ppo"]
+    eval_cfg = cfg["evaluation"]
+    jepa_cfg = cfg["jepa_model"]
+
+    checkpoint_root = paths_cfg.get("checkpoint_root", "checkpoints")
+    log_root = paths_cfg.get("log_root", "logs")
+    jepa_checkpoint_dir = paths_cfg["jepa_checkpoint_dir"]
+    ppo_checkpoint_dir = os.path.join(checkpoint_root, model_name)
+    jepa_checkpoint_path = os.path.join(jepa_checkpoint_dir, "best.pt")
+
+    run_dataset_kwargs = _build_dataset_kwargs(cfg)
+
+    # Optional subset of assets for PPO can be provided directly or via ticker list file.
+    if not run_dataset_kwargs.get("tickers"):
+        tickers = _load_tickers(paths_cfg.get("ticker_list_path", ""))
+        if tickers:
+            run_dataset_kwargs["tickers"] = tickers
+
+    asset_universe = None
+    jepa_checkpoint = None
+    if os.path.exists(jepa_checkpoint_path):
+        jepa_checkpoint = torch.load(jepa_checkpoint_path, map_location="cpu")
+        asset_universe = jepa_checkpoint.get("asset_universe")
+    if not asset_universe:
+        asset_universe = _load_asset_universe_from_path(paths_cfg.get("asset_universe_path"))
+    if asset_universe:
+        run_dataset_kwargs["asset_universe"] = asset_universe
+
+    print("Loading datasets...")
+    if run_dataset_kwargs.get("tickers"):
+        print(f"Using subset tickers for PPO: {run_dataset_kwargs['tickers']}")
+    else:
+        print("Using all available tickers for PPO.")
+    train_dataset = Dataset_Finance_MultiAsset(**run_dataset_kwargs)
+    val_dataset = Dataset_Finance_MultiAsset(**{**run_dataset_kwargs, "split": "val"})
+    num_assets = int(getattr(train_dataset, "num_asset_ids", len(train_dataset.asset_ids)))
+    print(
+        f"Loaded {len(train_dataset.asset_ids)} PPO assets with "
+        f"{num_assets} embedding IDs in the shared universe."
+    )
+
+    print("Building environments...")
+    action_mode = env_cfg.get("action_mode", "continuous")
+    print(f"Action mode: {action_mode}")
+    train_env = SubprocVecEnv(
+        [
+            make_env(
+                train_dataset,
+                env_cfg["episode_length_steps"],
+                env_cfg["transaction_cost"],
+                env_cfg["reward_scale"],
+                env_cfg["include_wealth"],
+                env_cfg.get("allow_short", True),
+                action_mode,
+            )
+            for _ in range(env_cfg["n_envs"])
+        ]
+    )
+    eval_env = SubprocVecEnv(
+        [
+            make_env(
+                val_dataset,
+                env_cfg["episode_length_steps"],
+                env_cfg["transaction_cost"],
+                env_cfg["reward_scale"],
+                env_cfg["include_wealth"],
+                env_cfg.get("allow_short", True),
+                action_mode,
+            )
+            for _ in range(env_cfg["n_envs"])
+        ]
+    )
+    # number of assets, and whether to use asset embeddings
+    encoder_num_assets = num_assets if jepa_cfg.get("use_asset_embeddings", True) else None
+    print(f"Asset embeddings: {jepa_cfg.get('use_asset_embeddings', True)}, {encoder_num_assets} assets")
+
+    print("Loading JEPA encoder...")
+    jepa_context_encoder = PatchTSTEncoder(
+        patch_len=jepa_cfg["patch_len"],
+        d_model=jepa_cfg["d_model"],
+        n_features=jepa_cfg["n_features"],
+        n_time_features=jepa_cfg["n_time_features"],
+        nhead=jepa_cfg["nhead"],
+        num_layers=jepa_cfg["num_layers"],
+        dim_ff=jepa_cfg["dim_ff"],
+        dropout=jepa_cfg["dropout"],
+        add_cls=jepa_cfg.get("add_cls", True),
+        pooling=jepa_cfg["pooling"],
+        pred_len=jepa_cfg["pred_len"],
+        num_assets=encoder_num_assets,
+    )
+
+    jepa_target_encoder = copy.deepcopy(jepa_context_encoder)
+
+    jepa_model = JEPA(
+        jepa_context_encoder,
+        jepa_target_encoder,
+        d_model=jepa_cfg["d_model"],
+        ema_tau_min=jepa_cfg["ema_tau_min"],
+        ema_tau_max=jepa_cfg["ema_tau_max"],
+    )
+
+    checkpoint_path = jepa_checkpoint_path
+    if os.path.exists(checkpoint_path):
+        print(f"Loading JEPA weights from {checkpoint_path}")
+        checkpoint = jepa_checkpoint if jepa_checkpoint is not None else torch.load(checkpoint_path, map_location="cpu")
+        missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
+        if missing:
+            print(f"Missing keys in checkpoint: {missing}")
+        if unexpected:
+            print(f"Unexpected keys in checkpoint: {unexpected}")
+    else:
+        print("No JEPA checkpoint found, using randomly initialized encoder.")
+
+    if not ppo_cfg.get("update_jepa", True):
+        for param in jepa_model.parameters():
+            param.requires_grad = False
+        jepa_model.eval()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    jepa_loss_type = ppo_cfg.get("jepa_loss_type", "mse")
+    policy_kwargs = dict(
+        features_extractor_class=JEPAAuxFeatureExtractor,
+        features_extractor_kwargs=dict(
+            jepa_model=jepa_model,
+            embedding_dim=jepa_cfg["d_model"],
+            patch_len=jepa_cfg["patch_len"],
+            patch_stride=jepa_cfg["patch_stride"],
+            use_obs_targets=True,
+            target_len=dataset_cfg["target_len"],
+            jepa_loss_type=jepa_loss_type,
+        ),
+        net_arch=dict(pi=[256, 256], vf=[256, 256]),
+    )
+
+    resume_path = resume_cfg.get("path")
+    if resume_path is None and resume_cfg.get("auto_resume", False):
+        resume_path = get_latest_checkpoint(ppo_checkpoint_dir)
+        if resume_path:
+            print(f"Auto-resume from latest PPO checkpoint: {resume_path}")
+
+    if resume_path and os.path.exists(resume_path):
+        print(f"Resuming PPO from {resume_path}")
+        model = PPOWithJEPA.load(
+            resume_path,
+            env=train_env,
+            device=device,
+            custom_objects={"policy_kwargs": policy_kwargs},
+        )
+        model.tensorboard_log = log_root
+        model.update_jepa = ppo_cfg.get("update_jepa", True)
+        model.jepa_coef = ppo_cfg.get("jepa_loss_coef", 0.01)
+    else:
+        model = PPOWithJEPA(
+            policy="MultiInputPolicy",
+            env=train_env,
+            learning_rate=ppo_cfg["learning_rate"],
+            n_steps=ppo_cfg["rollout_length_steps"],
+            batch_size=ppo_cfg["batch_size"],
+            n_epochs=ppo_cfg["n_epochs"],
+            gamma=ppo_cfg["gamma"],
+            gae_lambda=ppo_cfg["gae_lambda"],
+            clip_range=ppo_cfg["clip_range"],
+            ent_coef=ppo_cfg["ent_coef_start"],
+            vf_coef=ppo_cfg["vf_coef"],
+            max_grad_norm=ppo_cfg["max_grad_norm"],
+            target_kl=ppo_cfg["target_kl"],
+            update_jepa=ppo_cfg.get("update_jepa", True),
+            jepa_coef=ppo_cfg.get("jepa_loss_coef", 0.01),
+            policy_kwargs=policy_kwargs,
+            device=device,
+            verbose=1,
+            tensorboard_log=log_root,
+        )
+
+    class JEPACheckpoint(BaseCallback):
+        def __init__(self, jepa_model: JEPA, save_dir: str, every_n_steps: int):
+            super().__init__()
+            self.jepa_model = jepa_model
+            self.save_dir = save_dir
+            self.every_n_steps = every_n_steps
+
+        def _on_step(self) -> bool:
+            if self.n_calls % self.every_n_steps != 0:
+                return True
+            os.makedirs(self.save_dir, exist_ok=True)
+            path = os.path.join(self.save_dir, f"jepa_step_{self.n_calls}.pt")
+            torch.save({"model": self.jepa_model.state_dict(), "step": self.n_calls}, path)
+            return True
+
+    class JEPABestSync(BaseCallback):
+        def __init__(self, jepa_model: JEPA, ppo_best_path: str, save_dir: str):
+            super().__init__()
+            self.jepa_model = jepa_model
+            self.ppo_best_path = ppo_best_path
+            self.save_dir = save_dir
+            self._last_mtime = None
+
+        def _on_step(self) -> bool:
+            if not os.path.exists(self.ppo_best_path):
+                return True
+            mtime = os.path.getmtime(self.ppo_best_path)
+            if self._last_mtime is None or mtime > self._last_mtime:
+                os.makedirs(self.save_dir, exist_ok=True)
+                path = os.path.join(self.save_dir, "best_jepa_ppo.pt")
+                torch.save({"model": self.jepa_model.state_dict(), "step": self.n_calls}, path)
+                self._last_mtime = mtime
+            return True
+
+    callbacks = [
+        CustomTensorboardCallback(),
+        EntropyScheduleCallback(
+            total_timesteps=ppo_cfg["total_timesteps"],
+            warmup_fraction=ppo_cfg["ent_warmup_fraction"],
+            ent_coef_start=ppo_cfg["ent_coef_start"],
+            ent_coef_end=ppo_cfg["ent_coef_end"],
+        ),
+        CheckpointCallback(
+            save_freq=eval_cfg["checkpoint_every_steps"],
+            save_path=ppo_checkpoint_dir,
+            name_prefix="ppo",
+        ),
+        RewardEvalCallback(
+            eval_env,
+            best_model_save_path=f"{checkpoint_root}/{model_name}",
+            log_path=f"{log_root}/{model_name}_eval",
+            eval_freq=eval_cfg["every_steps"],
+            n_eval_episodes=eval_cfg["episodes"],
+            deterministic=True,
+        ),
+        JEPACheckpoint(
+            jepa_model=jepa_model,
+            save_dir=f"{checkpoint_root}/{model_name}",
+            every_n_steps=eval_cfg["checkpoint_every_steps"],
+        ),
+        JEPABestSync(
+            jepa_model=jepa_model,
+            ppo_best_path=f"{checkpoint_root}/{model_name}/best_model.zip",
+            save_dir=f"{checkpoint_root}/{model_name}",
+        ),
+    ]
+
+    model.learn(
+        total_timesteps=ppo_cfg["total_timesteps"],
+        callback=callbacks,
+        reset_num_timesteps=False,
+        tb_log_name=model_name,
+    )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train PPO with JEPA auxiliary objective")
+    parser.add_argument("--config", type=str, default=None, help="Path to JSON config file")
+    args = parser.parse_args()
+    main(config_path=args.config)

@@ -1,0 +1,80 @@
+{
+  "model_name": "jepa6_ppo_final1",
+  "paths": {
+    "checkpoint_root": "checkpoints",
+    "log_root": "logs",
+    "jepa_checkpoint_dir": "checkpoints/jepa_initial6",
+    "ticker_list_path": "configs/assets/tickers1.txt",
+    "asset_universe_path": null
+  },
+  "resume": {
+    "path": null,
+    "auto_resume": false
+  },
+  "dataset": {
+    "root_path": "Data/polygon",
+    "data_path": "data_raw_1m",
+    "start_date": null,
+    "split": "train",
+    "context_len": 512,
+    "target_len": 48,
+    "use_time_features": true,
+    "rolling_window": 252,
+    "train_split": 0.7,
+    "test_split": 0.15,
+    "tickers": null,
+    "regular_hours_only": true,
+    "timeframe": "15min"
+  },
+  "env": {
+    "episode_length_steps": 1024,
+    "n_envs": 8,
+    "transaction_cost": 0.0,
+    "include_wealth": true,
+    "reward_scale": 1.0,
+    "allow_short": true,
+    "action_mode": "discrete_3"
+  },
+  "ppo": {
+    "rollout_length_steps": 1024,
+    "total_timesteps": 6000000,
+    "learning_rate": 0.0001,
+    "n_epochs": 2,
+    "batch_size": 256,
+    "gamma": 0.995,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef_start": 0.001,
+    "ent_coef_end": 0.0001,
+    "ent_warmup_fraction": 0.2,
+    "vf_coef": 0.7,
+    "max_grad_norm": 0.5,
+    "target_kl": 0.015,
+    "update_jepa": true,
+    "jepa_loss_coef": 0.01,
+    "jepa_loss_type": "smoothL1"
+  },
+  "evaluation": {
+    "episodes": 1,
+    "episode_len": 1024,
+    "every_steps": 40000,
+    "checkpoint_every_steps": 100000
+  },
+  "jepa_model": {
+    "patch_len": 8,
+    "patch_stride": 8,
+    "d_model": 192,
+    "n_features": 9,
+    "n_time_features": 2,
+    "nhead": 4,
+    "num_layers": 4,
+    "dim_ff": 768,
+    "dropout": 0.0,
+    "add_cls": true,
+    "pooling": "cls",
+    "pred_len": 48,
+    "ema_tau_min": 0.99,
+    "ema_tau_max": 0.999,
+    "use_asset_embeddings": false
+  }
+}
