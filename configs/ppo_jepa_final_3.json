@@ -1,5 +1,5 @@
 {
-  "model_name": "jepa6_ppo_final1",
+  "model_name": "jepa6_ppo_final3",
   "paths": {
     "checkpoint_root": "checkpoints",
     "log_root": "logs",
