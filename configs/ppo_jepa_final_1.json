@@ -57,7 +57,7 @@
   "evaluation": {
     "episodes": 1,
     "episode_len": 1024,
-    "every_steps": 40000,
+    "every_steps": 10000,
     "checkpoint_every_steps": 100000
   },
   "jepa_model": {
