@@ -356,6 +356,8 @@ class RewardEvalCallback(EvalCallback):
         super().__init__(*args, **kwargs)
         self.trade_eps = float(trade_eps)
         self._eval_trade_counts_by_env: dict[int, int] = {}
+        self._eval_bh_logret_by_env: dict[int, float] = {}
+        self._last_eval_episode_excess_returns: list[float] = []
         self._last_eval_episode_trades: list[int] = []
 
     def _log_success_callback(self, locals_: Dict[str, Any], globals_: Dict[str, Any]) -> None:
@@ -366,26 +368,45 @@ class RewardEvalCallback(EvalCallback):
 
         if env_idx not in self._eval_trade_counts_by_env:
             self._eval_trade_counts_by_env[env_idx] = 0
+        if env_idx not in self._eval_bh_logret_by_env:
+            self._eval_bh_logret_by_env[env_idx] = 0.0
 
         if isinstance(info, dict):
             turnover = info.get("turnover")
             if turnover is not None and float(turnover) > self.trade_eps:
                 self._eval_trade_counts_by_env[env_idx] += 1
+            raw_ret = info.get("return")
+            if raw_ret is not None:
+                self._eval_bh_logret_by_env[env_idx] += float(raw_ret)
 
         if done:
             self._last_eval_episode_trades.append(self._eval_trade_counts_by_env[env_idx])
+            if isinstance(info, dict):
+                wealth = info.get("wealth")
+                if wealth is not None:
+                    strategy_ret = float(wealth) - 1.0
+                    bh_ret = float(np.exp(self._eval_bh_logret_by_env[env_idx]) - 1.0)
+                    self._last_eval_episode_excess_returns.append(strategy_ret - bh_ret)
             self._eval_trade_counts_by_env[env_idx] = 0
+            self._eval_bh_logret_by_env[env_idx] = 0.0
 
     def _on_step(self) -> bool:
         eval_now = self.eval_freq > 0 and self.n_calls % self.eval_freq == 0
         if eval_now:
             self._eval_trade_counts_by_env = {}
+            self._eval_bh_logret_by_env = {}
+            self._last_eval_episode_excess_returns = []
             self._last_eval_episode_trades = []
         continue_training = super()._on_step()
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0 and self.evaluations_results:
             eval_rewards = np.asarray(self.evaluations_results[-1], dtype=np.float64)
             if eval_rewards.size:
                 self.logger.record("custom/eval_episode_reward_mean", float(np.mean(eval_rewards)))
+            if self._last_eval_episode_excess_returns:
+                self.logger.record(
+                    "custom/eval_excess_return_mean",
+                    float(np.mean(self._last_eval_episode_excess_returns)),
+                )
             if self._last_eval_episode_trades:
                 self.logger.record(
                     "custom/eval_episode_trades_mean",
