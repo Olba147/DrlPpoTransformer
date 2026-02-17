@@ -322,6 +322,7 @@ def main(config_path: str | None = None):
             warmup_fraction=ppo_cfg["ent_warmup_fraction"],
             ent_coef_start=ppo_cfg["ent_coef_start"],
             ent_coef_end=ppo_cfg["ent_coef_end"],
+            ent_decay_steps=ppo_cfg.get("ent_decay_steps"),
         ),
         TransactionCostScheduleCallback(
             total_timesteps=ppo_cfg["total_timesteps"],
