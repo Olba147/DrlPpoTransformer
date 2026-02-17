@@ -210,3 +210,6 @@ class GymTradingEnv(gym.Env):
         terminated = done
         truncated = False
         return obs, reward, terminated, truncated, info
+
+    def set_transaction_cost(self, transaction_cost: float):
+        self.env.transaction_cost = float(transaction_cost)

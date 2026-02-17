@@ -377,3 +377,60 @@ class EntropyScheduleCallback(BaseCallback):
         self.model.ent_coef = ent_coef
         self.logger.record("custom/ent_coef", float(ent_coef))
         return True
+
+
+class TransactionCostScheduleCallback(BaseCallback):
+    def __init__(
+        self,
+        total_timesteps: int,
+        cost_start: float,
+        cost_end: float,
+        cost_steps: int,
+        eval_env=None,
+        verbose=0,
+    ):
+        super().__init__(verbose=verbose)
+        self.total_timesteps = max(1, int(total_timesteps))
+        self.cost_start = float(cost_start)
+        self.cost_end = float(cost_end)
+        self.cost_steps = max(1, int(cost_steps))
+        self.eval_env = eval_env
+        self._last_cost: float | None = None
+        self._last_level: int | None = None
+
+    def _scheduled_cost_and_level(self) -> tuple[float, int]:
+        if self.cost_steps <= 1 or self.cost_start == self.cost_end:
+            return self.cost_end, 0
+        n_levels = self.cost_steps
+        progress = min(1.0, max(0.0, self.num_timesteps / self.total_timesteps))
+        level_idx = min(int(progress * (n_levels - 1)), n_levels - 1)
+        alpha = level_idx / (n_levels - 1)
+        cost = self.cost_start + alpha * (self.cost_end - self.cost_start)
+        return cost, level_idx
+
+    def _set_cost(self, env, cost: float) -> None:
+        if env is None:
+            return
+        # GymTradingEnv stores the trading env in .env; update all vectorized workers.
+        env.env_method("set_transaction_cost", float(cost))
+
+    def _on_training_start(self) -> None:
+        initial_cost, initial_level = self._scheduled_cost_and_level()
+        self._set_cost(self.training_env, initial_cost)
+        self._set_cost(self.eval_env, initial_cost)
+        self._last_cost = initial_cost
+        self._last_level = initial_level
+        self.logger.record("custom/transaction_cost", float(initial_cost))
+        self.logger.record("custom/transaction_cost_level", int(initial_level))
+        self.logger.record("custom/transaction_cost_levels_total", int(self.cost_steps))
+
+    def _on_step(self) -> bool:
+        cost, level = self._scheduled_cost_and_level()
+        if self._last_cost is None or abs(cost - self._last_cost) > 1e-12:
+            self._set_cost(self.training_env, cost)
+            self._set_cost(self.eval_env, cost)
+            self._last_cost = cost
+            self._last_level = level
+        self.logger.record("custom/transaction_cost", float(cost))
+        self.logger.record("custom/transaction_cost_level", int(level))
+        return True

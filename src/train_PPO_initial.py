@@ -10,7 +10,12 @@ from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
-from Training.callbacks import CustomTensorboardCallback, EntropyScheduleCallback, RewardEvalCallback
+from Training.callbacks import (
+    CustomTensorboardCallback,
+    EntropyScheduleCallback,
+    RewardEvalCallback,
+    TransactionCostScheduleCallback,
+)
 from Training.ppo_env import GymTradingEnv
 from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
 from models.jepa.jepa import JEPA
@@ -135,13 +140,20 @@ def main(config_path: str | None = None):
 
     print("Building environments...")
     action_mode = env_cfg.get("action_mode", "continuous")
+    transaction_cost_start = env_cfg.get("transaction_cost_start", env_cfg.get("transaction_cost", 0.0))
+    transaction_cost_end = env_cfg.get("transaction_cost_end", transaction_cost_start)
+    transaction_cost_steps = env_cfg.get("transaction_cost_steps", 1)
+    print(
+        "Transaction cost schedule: "
+        f"start={transaction_cost_start}, end={transaction_cost_end}, steps={transaction_cost_steps}"
+    )
     print(f"Action mode: {action_mode}")
     train_env = SubprocVecEnv(
         [
             make_env(
                 train_dataset,
                 env_cfg["episode_length_steps"],
-                env_cfg["transaction_cost"],
+                transaction_cost_start,
                 env_cfg["reward_scale"],
                 env_cfg["include_wealth"],
                 env_cfg.get("allow_short", True),
@@ -155,7 +167,7 @@ def main(config_path: str | None = None):
             make_env(
                 val_dataset,
                 env_cfg["episode_length_steps"],
-                env_cfg["transaction_cost"],
+                transaction_cost_start,
                 env_cfg["reward_scale"],
                 env_cfg["include_wealth"],
                 env_cfg.get("allow_short", True),
@@ -308,6 +320,13 @@ def main(config_path: str | None = None):
             warmup_fraction=ppo_cfg["ent_warmup_fraction"],
             ent_coef_start=ppo_cfg["ent_coef_start"],
             ent_coef_end=ppo_cfg["ent_coef_end"],
+        ),
+        TransactionCostScheduleCallback(
+            total_timesteps=ppo_cfg["total_timesteps"],
+            cost_start=transaction_cost_start,
+            cost_end=transaction_cost_end,
+            cost_steps=transaction_cost_steps,
+            eval_env=eval_env,
         ),
         CheckpointCallback(
             save_freq=eval_cfg["checkpoint_every_steps"],
