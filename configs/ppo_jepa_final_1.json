@@ -9,7 +9,7 @@
   },
   "resume": {
     "path": null,
-    "auto_resume": false
+    "auto_resume": true
   },
   "dataset": {
     "root_path": "Data/polygon",

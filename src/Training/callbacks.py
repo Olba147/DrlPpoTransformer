@@ -352,13 +352,34 @@ class CustomTensorboardCallback(BaseCallback):
 
 
 class RewardEvalCallback(EvalCallback):
-    def __init__(self, *args, trade_eps: float = 1e-8, **kwargs):
+    def __init__(self, *args, trade_eps: float = 1e-8, append_existing_log: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.trade_eps = float(trade_eps)
+        self.append_existing_log = bool(append_existing_log)
         self._eval_trade_counts_by_env: dict[int, int] = {}
         self._eval_bh_logret_by_env: dict[int, float] = {}
         self._last_eval_episode_excess_returns: list[float] = []
         self._last_eval_episode_trades: list[int] = []
+
+    def _init_callback(self) -> None:
+        super()._init_callback()
+        if not self.append_existing_log or self.log_path is None:
+            return
+        npz_path = os.path.join(self.log_path, "evaluations.npz")
+        if not os.path.exists(npz_path):
+            return
+        try:
+            data = np.load(npz_path, allow_pickle=True)
+            if "timesteps" in data:
+                self.evaluations_timesteps = list(np.asarray(data["timesteps"]).tolist())
+            if "results" in data:
+                self.evaluations_results = list(np.asarray(data["results"]).tolist())
+            if "ep_lengths" in data:
+                self.evaluations_length = list(np.asarray(data["ep_lengths"]).tolist())
+            if "successes" in data:
+                self.evaluations_successes = list(np.asarray(data["successes"]).tolist())
+        except Exception as exc:
+            print(f"[RewardEvalCallback] Failed to load existing eval log from {npz_path}: {exc}")
 
     def _log_success_callback(self, locals_: Dict[str, Any], globals_: Dict[str, Any]) -> None:
         super()._log_success_callback(locals_, globals_)
