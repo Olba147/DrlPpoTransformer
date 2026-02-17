@@ -34,7 +34,7 @@
     "transaction_cost_steps": 1,
     "transaction_cost_warmup": 0,
     "include_wealth": true,
-    "reward_scale": 1.0,
+    "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
   },
@@ -47,7 +47,7 @@
     "gamma": 0.9995,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef_start": 0.001,
+    "ent_coef_start": 0.05,
     "ent_coef_end": 0.0001,
     "ent_warmup_fraction": 0.4,
     "vf_coef": 0.7,
@@ -59,8 +59,8 @@
   },
   "evaluation": {
     "episodes": 1,
-    "episode_len": 1024,
-    "every_steps": 5000,
+    "episode_len": 2024,
+    "every_steps": 10000,
     "checkpoint_every_steps": 100000
   },
   "jepa_model": {
