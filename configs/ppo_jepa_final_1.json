@@ -29,7 +29,7 @@
   "env": {
     "episode_length_steps": 1024,
     "n_envs": 8,
-    "transaction_cost": 0.002,
+    "transaction_cost": 0.001,
     "include_wealth": true,
     "reward_scale": 1.0,
     "allow_short": true,

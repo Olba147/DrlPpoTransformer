@@ -112,7 +112,8 @@ class TradingEnv:
         r_tp1 = float(np.log(close_tp1 / close_t))
 
         turnover = abs(w_t - self.state.w_prev)
-        reward = w_t * r_tp1 - self.transaction_cost * turnover
+        cost = min(self.transaction_cost * turnover, 0.99)
+        reward = w_t * r_tp1 + float(np.log1p(-cost))
         self.state.wealth *= float(np.exp(reward))
         scaled_reward = reward * self.reward_scale
 
