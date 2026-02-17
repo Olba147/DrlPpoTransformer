@@ -276,16 +276,21 @@ class CheckpointCallback(Callback):
 
 
 class CustomTensorboardCallback(BaseCallback):
-    def __init__(self, episode_window: int = 100, verbose=0):
+    def __init__(self, episode_window: int = 100, trade_eps: float = 1e-8, verbose=0):
         super().__init__(verbose=verbose)
         self.episode_window = int(episode_window)
+        self.trade_eps = float(trade_eps)
         self._episode_rewards: list[float] = []
+        self._episode_trades: list[int] = []
         self._recent_episode_rewards: deque[float] = deque(maxlen=self.episode_window)
+        self._recent_episode_trades: deque[float] = deque(maxlen=self.episode_window)
 
     def _on_training_start(self) -> None:
         n_envs = int(getattr(self.training_env, "num_envs", 1))
         self._episode_rewards = [0.0 for _ in range(n_envs)]
+        self._episode_trades = [0 for _ in range(n_envs)]
         self._recent_episode_rewards = deque(maxlen=self.episode_window)
+        self._recent_episode_trades = deque(maxlen=self.episode_window)
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos")
@@ -298,12 +303,15 @@ class CustomTensorboardCallback(BaseCallback):
         rewards = self.locals.get("rewards")
         dones = self.locals.get("dones")
         ended_episode_rewards = []
+        ended_episode_trades = []
+        turnover_by_env = [None for _ in range(len(infos))]
 
-        for info in infos:
+        for idx, info in enumerate(infos):
             if not info:
                 continue
             if "turnover" in info:
                 turnovers.append(info["turnover"])
+                turnover_by_env[idx] = float(info["turnover"])
             if "position" in info:
                 positions.append(abs(info["position"]))
             if "wealth" in info:
@@ -317,11 +325,18 @@ class CustomTensorboardCallback(BaseCallback):
                 dones_arr = np.asarray(dones, dtype=bool).reshape(-1)
                 for i, step_reward in enumerate(rewards_arr):
                     self._episode_rewards[i] += float(step_reward)
+                    turnover_i = turnover_by_env[i]
+                    if turnover_i is not None and turnover_i > self.trade_eps:
+                        self._episode_trades[i] += 1
                     if dones_arr[i]:
                         episode_reward = self._episode_rewards[i]
+                        episode_trades = self._episode_trades[i]
                         ended_episode_rewards.append(episode_reward)
+                        ended_episode_trades.append(episode_trades)
                         self._recent_episode_rewards.append(episode_reward)
+                        self._recent_episode_trades.append(episode_trades)
                         self._episode_rewards[i] = 0.0
+                        self._episode_trades[i] = 0
 
         if turnovers:
             self.logger.record("custom/turnover_mean", float(np.mean(turnovers)))
@@ -331,22 +346,62 @@ class CustomTensorboardCallback(BaseCallback):
             self.logger.record("custom/wealth_mean", float(np.mean(wealths)))
         if ended_episode_rewards:
             self.logger.record("custom/episode_reward_mean", float(np.mean(ended_episode_rewards)))
+        if ended_episode_trades:
+            self.logger.record("custom/episode_trades_mean", float(np.mean(ended_episode_trades)))
         if self._recent_episode_rewards:
             self.logger.record(
                 "custom/episode_reward_mean_100",
                 float(np.mean(self._recent_episode_rewards)),
+            )
+        if self._recent_episode_trades:
+            self.logger.record(
+                "custom/episode_trades_mean_100",
+                float(np.mean(self._recent_episode_trades)),
             )
 
         return True
 
 
 class RewardEvalCallback(EvalCallback):
+    def __init__(self, *args, trade_eps: float = 1e-8, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.trade_eps = float(trade_eps)
+        self._eval_trade_counts_by_env: dict[int, int] = {}
+        self._last_eval_episode_trades: list[int] = []
+
+    def _log_success_callback(self, locals_: Dict[str, Any], globals_: Dict[str, Any]) -> None:
+        super()._log_success_callback(locals_, globals_)
+        info = locals_.get("info")
+        done = bool(locals_.get("done", False))
+        env_idx = int(locals_.get("i", 0))
+
+        if env_idx not in self._eval_trade_counts_by_env:
+            self._eval_trade_counts_by_env[env_idx] = 0
+
+        if isinstance(info, dict):
+            turnover = info.get("turnover")
+            if turnover is not None and float(turnover) > self.trade_eps:
+                self._eval_trade_counts_by_env[env_idx] += 1
+
+        if done:
+            self._last_eval_episode_trades.append(self._eval_trade_counts_by_env[env_idx])
+            self._eval_trade_counts_by_env[env_idx] = 0
+
     def _on_step(self) -> bool:
+        eval_now = self.eval_freq > 0 and self.n_calls % self.eval_freq == 0
+        if eval_now:
+            self._eval_trade_counts_by_env = {}
+            self._last_eval_episode_trades = []
         continue_training = super()._on_step()
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0 and self.evaluations_results:
             eval_rewards = np.asarray(self.evaluations_results[-1], dtype=np.float64)
             if eval_rewards.size:
                 self.logger.record("custom/eval_episode_reward_mean", float(np.mean(eval_rewards)))
+            if self._last_eval_episode_trades:
+                self.logger.record(
+                    "custom/eval_episode_trades_mean",
+                    float(np.mean(self._last_eval_episode_trades)),
+                )
             if self.evaluations_length:
                 eval_lengths = np.asarray(self.evaluations_length[-1], dtype=np.float64)
                 if eval_rewards.size and eval_lengths.size:
@@ -386,6 +441,7 @@ class TransactionCostScheduleCallback(BaseCallback):
         cost_start: float,
         cost_end: float,
         cost_steps: int,
+        cost_warmup_timesteps: int = 0,
         eval_env=None,
         verbose=0,
     ):
@@ -394,19 +450,28 @@ class TransactionCostScheduleCallback(BaseCallback):
         self.cost_start = float(cost_start)
         self.cost_end = float(cost_end)
         self.cost_steps = max(1, int(cost_steps))
+        self.cost_warmup_timesteps = max(0, int(cost_warmup_timesteps))
         self.eval_env = eval_env
         self._last_cost: float | None = None
         self._last_level: int | None = None
 
     def _scheduled_cost_and_level(self) -> tuple[float, int]:
-        if self.cost_steps <= 1 or self.cost_start == self.cost_end:
+        # Hold at start cost during warmup.
+        if self.num_timesteps < self.cost_warmup_timesteps:
+            return self.cost_start, 0
+
+        # After warmup, increase in discrete steps until reaching end cost.
+        if self.cost_start == self.cost_end:
             return self.cost_end, 0
-        n_levels = self.cost_steps
-        progress = min(1.0, max(0.0, self.num_timesteps / self.total_timesteps))
-        level_idx = min(int(progress * (n_levels - 1)), n_levels - 1)
-        alpha = level_idx / (n_levels - 1)
+
+        n_increments = self.cost_steps
+        post_warmup_total = max(1, self.total_timesteps - self.cost_warmup_timesteps)
+        post_warmup_steps = max(0, self.num_timesteps - self.cost_warmup_timesteps)
+        progress = min(1.0, max(0.0, post_warmup_steps / post_warmup_total))
+        increment_idx = min(int(progress * n_increments), n_increments)
+        alpha = increment_idx / n_increments
         cost = self.cost_start + alpha * (self.cost_end - self.cost_start)
-        return cost, level_idx
+        return cost, increment_idx
 
     def _set_cost(self, env, cost: float) -> None:
         if env is None:
@@ -423,6 +488,7 @@ class TransactionCostScheduleCallback(BaseCallback):
         self.logger.record("custom/transaction_cost", float(initial_cost))
         self.logger.record("custom/transaction_cost_level", int(initial_level))
         self.logger.record("custom/transaction_cost_levels_total", int(self.cost_steps))
+        self.logger.record("custom/transaction_cost_warmup_timesteps", int(self.cost_warmup_timesteps))
 
     def _on_step(self) -> bool:
         cost, level = self._scheduled_cost_and_level()

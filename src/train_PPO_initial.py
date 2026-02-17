@@ -143,9 +143,11 @@ def main(config_path: str | None = None):
     transaction_cost_start = env_cfg.get("transaction_cost_start", env_cfg.get("transaction_cost", 0.0))
     transaction_cost_end = env_cfg.get("transaction_cost_end", transaction_cost_start)
     transaction_cost_steps = env_cfg.get("transaction_cost_steps", 1)
+    transaction_cost_warmup = env_cfg.get("transaction_cost_warmup", 0)
     print(
         "Transaction cost schedule: "
-        f"start={transaction_cost_start}, end={transaction_cost_end}, steps={transaction_cost_steps}"
+        f"start={transaction_cost_start}, end={transaction_cost_end}, "
+        f"steps={transaction_cost_steps}, warmup={transaction_cost_warmup}"
     )
     print(f"Action mode: {action_mode}")
     train_env = SubprocVecEnv(
@@ -326,6 +328,7 @@ def main(config_path: str | None = None):
             cost_start=transaction_cost_start,
             cost_end=transaction_cost_end,
             cost_steps=transaction_cost_steps,
+            cost_warmup_timesteps=transaction_cost_warmup,
             eval_env=eval_env,
         ),
         CheckpointCallback(
