@@ -348,17 +348,6 @@ class CustomTensorboardCallback(BaseCallback):
             self.logger.record("custom/episode_reward_mean", float(np.mean(ended_episode_rewards)))
         if ended_episode_trades:
             self.logger.record("custom/episode_trades_mean", float(np.mean(ended_episode_trades)))
-        if self._recent_episode_rewards:
-            self.logger.record(
-                "custom/episode_reward_mean_100",
-                float(np.mean(self._recent_episode_rewards)),
-            )
-        if self._recent_episode_trades:
-            self.logger.record(
-                "custom/episode_trades_mean_100",
-                float(np.mean(self._recent_episode_trades)),
-            )
-
         return True
 
 

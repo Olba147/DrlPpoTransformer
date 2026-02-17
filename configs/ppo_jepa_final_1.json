@@ -27,12 +27,12 @@
     "timeframe": "15min"
   },
   "env": {
-    "episode_length_steps": 1024,
+    "episode_length_steps": 2024,
     "n_envs": 16,
-    "transaction_cost_start": 0.001,
+    "transaction_cost_start": 0.000,
     "transaction_cost_end": 0.001,
-    "transaction_cost_steps": 1,
-    "transaction_cost_warmup": 0,
+    "transaction_cost_steps": 4,
+    "transaction_cost_warmup": 4000000,
     "include_wealth": true,
     "reward_scale": 1.0,
     "allow_short": true,
