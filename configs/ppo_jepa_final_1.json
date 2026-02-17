@@ -59,8 +59,8 @@
     "jepa_loss_type": "smoothL1"
   },
   "evaluation": {
-    "episodes": 2,
-    "episode_len": 2024,
+    "episodes": 1,
+    "episode_len": 4000,
     "every_steps": 10000,
     "checkpoint_every_steps": 20000
   },
