@@ -103,6 +103,7 @@ class PatchTSTEncoder(nn.Module):
         """
         X_patch        : [B, N, patch_len*6]
         time_cont_patch: [B, N, patch_len*2]
+        asset_id: [B]
         Returns:
           task='embedding' -> [B, d_model]
           task='forecast'  -> [B, pred_len]
