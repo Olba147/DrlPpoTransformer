@@ -27,6 +27,7 @@ class TradingEnv:
         allow_short: bool = True,
         action_mode: str = "continuous",
         include_wealth: bool = True,
+        fixed_asset_id: Optional[str] = None,
         seed: Optional[int] = None,
     ) -> None:
         self.dataset = dataset
@@ -45,11 +46,14 @@ class TradingEnv:
             raise ValueError("Dataset must contain asset_ids to build episodes.")
         if self.action_mode not in {"continuous", "discrete_3"}:
             raise ValueError(f"Unknown action_mode: {self.action_mode}")
+        if fixed_asset_id is not None and fixed_asset_id not in dataset.asset_ids:
+            raise ValueError(f"Unknown fixed_asset_id: {fixed_asset_id}")
+        self.fixed_asset_id = fixed_asset_id
 
         self.state: Optional[EnvState] = None
 
     def _sample_start(self) -> Tuple[str, int]:
-        asset_id = self.rng.choice(self.dataset.asset_ids)
+        asset_id = self.fixed_asset_id or self.rng.choice(self.dataset.asset_ids)
         data_len = len(self.dataset.data_x[asset_id])
         max_start = data_len - self.seq_len - self.pred_len - self.episode_len
         if max_start <= 0:
@@ -150,6 +154,7 @@ class GymTradingEnv(gym.Env):
         allow_short: bool = True,
         action_mode: str = "continuous",
         include_wealth: bool = True,
+        fixed_asset_id: Optional[str] = None,
         seed: Optional[int] = None,
     ) -> None:
         super().__init__()
@@ -161,6 +166,7 @@ class GymTradingEnv(gym.Env):
             allow_short=allow_short,
             action_mode=action_mode,
             include_wealth=include_wealth,
+            fixed_asset_id=fixed_asset_id,
             seed=seed,
         )
 

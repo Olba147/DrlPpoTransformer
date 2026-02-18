@@ -64,6 +64,7 @@ def make_env(
     include_wealth: bool,
     allow_short: bool,
     action_mode: str,
+    fixed_asset_id: str | None = None,
 ):
     return lambda: GymTradingEnv(
         dataset,
@@ -73,6 +74,7 @@ def make_env(
         allow_short=allow_short,
         action_mode=action_mode,
         include_wealth=include_wealth,
+        fixed_asset_id=fixed_asset_id,
     )
 
 
@@ -149,6 +151,7 @@ def main(config_path: str | None = None):
         f"start={transaction_cost_start}, end={transaction_cost_end}, "
         f"steps={transaction_cost_steps}, warmup={transaction_cost_warmup}"
     )
+    eval_episode_len = int(eval_cfg.get("episode_len", env_cfg["episode_length_steps"]))
     print(f"Action mode: {action_mode}")
     train_env = SubprocVecEnv(
         [
@@ -168,16 +171,19 @@ def main(config_path: str | None = None):
         [
             make_env(
                 val_dataset,
-                env_cfg["episode_length_steps"],
+                eval_episode_len,
                 transaction_cost_start,
                 env_cfg["reward_scale"],
                 env_cfg["include_wealth"],
                 env_cfg.get("allow_short", True),
                 action_mode,
+                fixed_asset_id=asset_id,
             )
-            for _ in range(env_cfg["n_envs"])
+            for asset_id in val_dataset.asset_ids
         ]
     )
+    eval_n_episodes = len(val_dataset.asset_ids)
+    print(f"Evaluation setup: {eval_n_episodes} envs, one fixed asset per env, one episode per asset.")
     # number of assets, and whether to use asset embeddings
     encoder_num_assets = num_assets if jepa_cfg.get("use_asset_embeddings", True) else None
     print(f"Asset embeddings: {jepa_cfg.get('use_asset_embeddings', True)}, {encoder_num_assets} assets")
@@ -342,7 +348,7 @@ def main(config_path: str | None = None):
             best_model_save_path=f"{checkpoint_root}/{model_name}",
             log_path=f"{log_root}/{model_name}_eval",
             eval_freq=eval_cfg["every_steps"],
-            n_eval_episodes=eval_cfg["episodes"],
+            n_eval_episodes=eval_n_episodes,
             deterministic=True,
         ),
         JEPACheckpoint(
