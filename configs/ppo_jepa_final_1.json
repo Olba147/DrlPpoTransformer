@@ -47,21 +47,21 @@
     "gamma": 0.9995,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef_start": 0.05,
-    "ent_coef_end": 0.02,
+    "ent_coef_start": 0.04,
+    "ent_coef_end": 0.01,
     "ent_decay_steps": 8000000,
     "ent_warmup_fraction": 0.0,
     "vf_coef": 0.7,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
-    "update_jepa": true,
+    "update_jepa": false,
     "jepa_loss_coef": 0.01,
     "jepa_loss_type": "smoothL1"
   },
   "evaluation": {
     "episodes": 1,
     "episode_len": 4000,
-    "every_steps": 10000,
+    "every_steps": 5000,
     "checkpoint_every_steps": 20000
   },
   "jepa_model": {
