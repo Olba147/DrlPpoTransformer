@@ -212,6 +212,13 @@ class PPOWithJEPA(PPO):
         policy_learning_rate: float | None = None,
         jepa_learning_rate: float | None = None,
     ):
+        # Set custom optimizer fields before SB3 init, because SB3 may call
+        # _setup_model() inside super().__init__ when _init_setup_model=True.
+        self.optimizer_name = str(optimizer_name).lower()
+        self.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
+        self.policy_learning_rate = None if policy_learning_rate is None else float(policy_learning_rate)
+        self.jepa_learning_rate = None if jepa_learning_rate is None else float(jepa_learning_rate)
+
         super().__init__(
             policy=policy,
             env=env,
@@ -243,10 +250,6 @@ class PPOWithJEPA(PPO):
 
         self.update_jepa = update_jepa
         self.jepa_coef = jepa_coef
-        self.optimizer_name = str(optimizer_name).lower()
-        self.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
-        self.policy_learning_rate = None if policy_learning_rate is None else float(policy_learning_rate)
-        self.jepa_learning_rate = None if jepa_learning_rate is None else float(jepa_learning_rate)
 
     def _setup_model(self) -> None:
         super()._setup_model()
