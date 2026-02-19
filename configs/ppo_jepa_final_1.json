@@ -29,13 +29,13 @@
   "env": {
     "episode_length_steps": 2048,
     "n_envs": 16,
-    "transaction_cost_start": 0.0001,
+    "transaction_cost_start": 0.0005,
     "transaction_cost_end": 0.0005,
-    "transaction_cost_steps": 3,
+    "transaction_cost_steps": 0,
     "transaction_cost_schedule_timesteps": 6000000,
     "transaction_cost_warmup": 0,
     "include_wealth": true,
-    "include_asset_id": true,
+    "include_asset_id": false,
     "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
