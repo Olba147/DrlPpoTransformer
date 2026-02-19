@@ -247,6 +247,9 @@ class PPOWithJEPA(PPO):
         self.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
         self.policy_learning_rate = None if policy_learning_rate is None else float(policy_learning_rate)
         self.jepa_learning_rate = None if jepa_learning_rate is None else float(jepa_learning_rate)
+
+    def _setup_model(self) -> None:
+        super()._setup_model()
         self.configure_optimizer()
 
     def _resolve_optimizer_class(self):
