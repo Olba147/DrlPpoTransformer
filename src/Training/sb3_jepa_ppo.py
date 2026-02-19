@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch as th
@@ -207,6 +207,10 @@ class PPOWithJEPA(PPO):
         _init_setup_model: bool = True,
         update_jepa: bool = True,
         jepa_coef: float = 1.0,
+        optimizer_name: str = "adam",
+        optimizer_kwargs: dict[str, Any] | None = None,
+        policy_learning_rate: float | None = None,
+        jepa_learning_rate: float | None = None,
     ):
         super().__init__(
             policy=policy,
@@ -239,12 +243,78 @@ class PPOWithJEPA(PPO):
 
         self.update_jepa = update_jepa
         self.jepa_coef = jepa_coef
+        self.optimizer_name = str(optimizer_name).lower()
+        self.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
+        self.policy_learning_rate = None if policy_learning_rate is None else float(policy_learning_rate)
+        self.jepa_learning_rate = None if jepa_learning_rate is None else float(jepa_learning_rate)
+        self.configure_optimizer()
+
+    def _resolve_optimizer_class(self):
+        optimizers = {
+            "adam": th.optim.Adam,
+            "adamw": th.optim.AdamW,
+            "sgd": th.optim.SGD,
+            "rmsprop": th.optim.RMSprop,
+        }
+        if self.optimizer_name not in optimizers:
+            raise ValueError(f"Unsupported optimizer_name: {self.optimizer_name}")
+        return optimizers[self.optimizer_name]
+
+    def configure_optimizer(self) -> None:
+        optimizer_class = self._resolve_optimizer_class()
+        optimizer_kwargs = dict(self.optimizer_kwargs_custom)
+        optimizer_kwargs.pop("lr", None)
+        if self.optimizer_name == "adam" and "eps" not in optimizer_kwargs:
+            # Match SB3 default ActorCriticPolicy Adam epsilon.
+            optimizer_kwargs["eps"] = 1e-5
+
+        scheduled_lr = float(self.lr_schedule(1.0))
+        policy_lr = self.policy_learning_rate if self.policy_learning_rate is not None else scheduled_lr
+        jepa_lr = self.jepa_learning_rate if self.jepa_learning_rate is not None else policy_lr
+
+        jepa_params = []
+        fx = getattr(self.policy, "features_extractor", None)
+        jepa_model = getattr(fx, "jepa_model", None)
+        if jepa_model is not None:
+            jepa_params = [p for p in jepa_model.parameters() if p.requires_grad]
+
+        jepa_param_ids = {id(p) for p in jepa_params}
+        policy_params = [p for p in self.policy.parameters() if p.requires_grad and id(p) not in jepa_param_ids]
+
+        param_groups = []
+        if policy_params:
+            param_groups.append({"params": policy_params, "lr": policy_lr, "group_name": "policy"})
+        if jepa_params:
+            param_groups.append({"params": jepa_params, "lr": jepa_lr, "group_name": "jepa"})
+        if not param_groups:
+            raise ValueError("No trainable parameters found for optimizer configuration.")
+
+        self.policy.optimizer = optimizer_class(param_groups, **optimizer_kwargs)
+
+    def _update_group_learning_rates(self) -> None:
+        scheduled_lr = float(self.lr_schedule(self._current_progress_remaining))
+        policy_lr = self.policy_learning_rate if self.policy_learning_rate is not None else scheduled_lr
+        jepa_lr = self.jepa_learning_rate if self.jepa_learning_rate is not None else policy_lr
+
+        has_jepa_group = False
+        for group in self.policy.optimizer.param_groups:
+            group_name = group.get("group_name", "policy")
+            if group_name == "jepa":
+                group["lr"] = jepa_lr
+                has_jepa_group = True
+            else:
+                group["lr"] = policy_lr
+
+        self.logger.record("train/lr_policy", float(policy_lr))
+        self.logger.record("train/learning_rate", float(policy_lr))
+        if has_jepa_group:
+            self.logger.record("train/lr_jepa", float(jepa_lr))
 
     def train(self) -> None:
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
-        # Update optimizer learning rate
-        self._update_learning_rate(self.policy.optimizer)
+        # Keep policy and JEPA optimizer groups on their configured rates.
+        self._update_group_learning_rates()
         # Compute current clip range
         clip_range = self.clip_range(self._current_progress_remaining)
         # Optional: clip range for the value function

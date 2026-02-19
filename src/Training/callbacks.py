@@ -491,6 +491,7 @@ class TransactionCostScheduleCallback(BaseCallback):
         cost_start: float,
         cost_end: float,
         cost_steps: int,
+        cost_schedule_timesteps: int | None = None,
         cost_warmup_timesteps: int = 0,
         eval_env=None,
         verbose=0,
@@ -500,6 +501,9 @@ class TransactionCostScheduleCallback(BaseCallback):
         self.cost_start = float(cost_start)
         self.cost_end = float(cost_end)
         self.cost_steps = max(1, int(cost_steps))
+        self.cost_schedule_timesteps = (
+            None if cost_schedule_timesteps is None else max(1, int(cost_schedule_timesteps))
+        )
         self.cost_warmup_timesteps = max(0, int(cost_warmup_timesteps))
         self.eval_env = eval_env
         self._last_cost: float | None = None
@@ -515,7 +519,11 @@ class TransactionCostScheduleCallback(BaseCallback):
             return self.cost_end, 0
 
         n_increments = self.cost_steps
-        post_warmup_total = max(1, self.total_timesteps - self.cost_warmup_timesteps)
+        post_warmup_total = (
+            self.cost_schedule_timesteps
+            if self.cost_schedule_timesteps is not None
+            else max(1, self.total_timesteps - self.cost_warmup_timesteps)
+        )
         post_warmup_steps = max(0, self.num_timesteps - self.cost_warmup_timesteps)
         progress = min(1.0, max(0.0, post_warmup_steps / post_warmup_total))
         increment_idx = min(int(progress * n_increments), n_increments)
@@ -539,6 +547,8 @@ class TransactionCostScheduleCallback(BaseCallback):
         self.logger.record("custom/transaction_cost_level", int(initial_level))
         self.logger.record("custom/transaction_cost_levels_total", int(self.cost_steps))
         self.logger.record("custom/transaction_cost_warmup_timesteps", int(self.cost_warmup_timesteps))
+        if self.cost_schedule_timesteps is not None:
+            self.logger.record("custom/transaction_cost_schedule_timesteps", int(self.cost_schedule_timesteps))
 
     def _on_step(self) -> bool:
         cost, level = self._scheduled_cost_and_level()

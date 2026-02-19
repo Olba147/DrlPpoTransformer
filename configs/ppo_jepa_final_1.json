@@ -29,9 +29,10 @@
   "env": {
     "episode_length_steps": 2048,
     "n_envs": 16,
-    "transaction_cost_start": 0.0,
+    "transaction_cost_start": 0.0001,
     "transaction_cost_end": 0.0005,
-    "transaction_cost_steps": 5,
+    "transaction_cost_steps": 3,
+    "transaction_cost_schedule_timesteps": 6000000,
     "transaction_cost_warmup": 0,
     "include_wealth": true,
     "reward_scale": 10.0,
@@ -40,7 +41,7 @@
   },
   "ppo": {
     "rollout_length_steps": 2048,
-    "total_timesteps": 6000000,
+    "total_timesteps": 16000000,
     "learning_rate": 0.0001,
     "n_epochs": 2,
     "batch_size": 512,
@@ -54,9 +55,11 @@
     "vf_coef": 0.7,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
-    "update_jepa": false,
-    "jepa_loss_coef": 0.01,
-    "jepa_loss_type": "smoothL1"
+    "update_jepa": true,
+    "jepa_loss_coef": 0.1,
+    "jepa_loss_type": "smoothL1",
+    "policy_learning_rate": 0.0001,
+    "jepa_learning_rate": 0.00001
   },
   "evaluation": {
     "episodes": 1,

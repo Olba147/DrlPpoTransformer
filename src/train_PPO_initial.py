@@ -145,11 +145,13 @@ def main(config_path: str | None = None):
     transaction_cost_start = env_cfg.get("transaction_cost_start", env_cfg.get("transaction_cost", 0.0))
     transaction_cost_end = env_cfg.get("transaction_cost_end", transaction_cost_start)
     transaction_cost_steps = env_cfg.get("transaction_cost_steps", 1)
+    transaction_cost_schedule_timesteps = env_cfg.get("transaction_cost_schedule_timesteps")
     transaction_cost_warmup = env_cfg.get("transaction_cost_warmup", 0)
     print(
         "Transaction cost schedule: "
         f"start={transaction_cost_start}, end={transaction_cost_end}, "
-        f"steps={transaction_cost_steps}, warmup={transaction_cost_warmup}"
+        f"steps={transaction_cost_steps}, schedule_timesteps={transaction_cost_schedule_timesteps}, "
+        f"warmup={transaction_cost_warmup}"
     )
     eval_episode_len = int(eval_cfg.get("episode_len", env_cfg["episode_length_steps"]))
     print(f"Action mode: {action_mode}")
@@ -233,6 +235,15 @@ def main(config_path: str | None = None):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     jepa_loss_type = ppo_cfg.get("jepa_loss_type", "mse")
+    optimizer_name = ppo_cfg.get("optimizer", "adam")
+    optimizer_kwargs = ppo_cfg.get("optimizer_kwargs")
+    policy_learning_rate = ppo_cfg.get("policy_learning_rate")
+    jepa_learning_rate = ppo_cfg.get("jepa_learning_rate")
+    print(
+        "Optimizer setup: "
+        f"name={optimizer_name}, policy_lr={policy_learning_rate or ppo_cfg['learning_rate']}, "
+        f"jepa_lr={jepa_learning_rate if jepa_learning_rate is not None else 'same_as_policy'}"
+    )
     policy_kwargs = dict(
         features_extractor_class=JEPAAuxFeatureExtractor,
         features_extractor_kwargs=dict(
@@ -265,6 +276,15 @@ def main(config_path: str | None = None):
         model.tensorboard_log = log_root
         model.update_jepa = ppo_cfg.get("update_jepa", True)
         model.jepa_coef = ppo_cfg.get("jepa_loss_coef", 0.01)
+        model.optimizer_name = str(optimizer_name).lower()
+        model.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
+        model.policy_learning_rate = (
+            None if policy_learning_rate is None else float(policy_learning_rate)
+        )
+        model.jepa_learning_rate = (
+            None if jepa_learning_rate is None else float(jepa_learning_rate)
+        )
+        model.configure_optimizer()
     else:
         model = PPOWithJEPA(
             policy="MultiInputPolicy",
@@ -286,6 +306,10 @@ def main(config_path: str | None = None):
             device=device,
             verbose=1,
             tensorboard_log=log_root,
+            optimizer_name=optimizer_name,
+            optimizer_kwargs=optimizer_kwargs,
+            policy_learning_rate=policy_learning_rate,
+            jepa_learning_rate=jepa_learning_rate,
         )
 
     class JEPACheckpoint(BaseCallback):
@@ -336,6 +360,7 @@ def main(config_path: str | None = None):
             cost_start=transaction_cost_start,
             cost_end=transaction_cost_end,
             cost_steps=transaction_cost_steps,
+            cost_schedule_timesteps=transaction_cost_schedule_timesteps,
             cost_warmup_timesteps=transaction_cost_warmup,
             eval_env=eval_env,
         ),
