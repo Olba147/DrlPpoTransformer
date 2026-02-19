@@ -27,6 +27,7 @@ class TradingEnv:
         allow_short: bool = True,
         action_mode: str = "continuous",
         include_wealth: bool = True,
+        include_asset_id: bool = True,
         fixed_asset_id: Optional[str] = None,
         seed: Optional[int] = None,
     ) -> None:
@@ -37,6 +38,7 @@ class TradingEnv:
         self.allow_short = allow_short
         self.action_mode = action_mode
         self.include_wealth = include_wealth
+        self.include_asset_id = include_asset_id
         self.seq_len = dataset.seq_len
         self.pred_len = dataset.pred_len
         self.rng = np.random.default_rng(seed)
@@ -79,9 +81,10 @@ class TradingEnv:
             "t_context": t_context.astype(np.float32),
             "x_target": x_target.astype(np.float32),
             "t_target": t_target.astype(np.float32),
-            "asset_id": np.int64(asset_idx),
             "w_prev": np.array([w_prev], dtype=np.float32),
         }
+        if self.include_asset_id:
+            obs["asset_id"] = np.int64(asset_idx)
         if self.include_wealth:
             obs["wealth_feats"] = np.array([np.log(wealth)], dtype=np.float32)
         return obs
@@ -154,6 +157,7 @@ class GymTradingEnv(gym.Env):
         allow_short: bool = True,
         action_mode: str = "continuous",
         include_wealth: bool = True,
+        include_asset_id: bool = True,
         fixed_asset_id: Optional[str] = None,
         seed: Optional[int] = None,
     ) -> None:
@@ -166,6 +170,7 @@ class GymTradingEnv(gym.Env):
             allow_short=allow_short,
             action_mode=action_mode,
             include_wealth=include_wealth,
+            include_asset_id=include_asset_id,
             fixed_asset_id=fixed_asset_id,
             seed=seed,
         )
@@ -174,7 +179,6 @@ class GymTradingEnv(gym.Env):
         pred_len = dataset.pred_len
         n_features = dataset.data_x[dataset.asset_ids[0]].shape[-1]
         n_time_features = dataset.dates[dataset.asset_ids[0]].shape[-1]
-        n_assets = int(getattr(dataset, "num_asset_ids", len(dataset.asset_ids)))
         obs_spaces = {
             "x_context": spaces.Box(
                 low=-np.inf, high=np.inf, shape=(seq_len, n_features), dtype=np.float32
@@ -188,9 +192,11 @@ class GymTradingEnv(gym.Env):
             "t_target": spaces.Box(
                 low=-np.inf, high=np.inf, shape=(pred_len, n_time_features), dtype=np.float32
             ),
-            "asset_id": spaces.Discrete(n_assets),
             "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
         }
+        if include_asset_id:
+            n_assets = int(getattr(dataset, "num_asset_ids", len(dataset.asset_ids)))
+            obs_spaces["asset_id"] = spaces.Discrete(n_assets)
         if include_wealth:
             obs_spaces["wealth_feats"] = spaces.Box(
                 low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32

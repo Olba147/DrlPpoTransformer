@@ -35,6 +35,7 @@
     "transaction_cost_schedule_timesteps": 6000000,
     "transaction_cost_warmup": 0,
     "include_wealth": true,
+    "include_asset_id": true,
     "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"

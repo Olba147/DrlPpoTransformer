@@ -62,6 +62,7 @@ def make_env(
     transaction_cost: float,
     reward_scale: float,
     include_wealth: bool,
+    include_asset_id: bool,
     allow_short: bool,
     action_mode: str,
     fixed_asset_id: str | None = None,
@@ -74,6 +75,7 @@ def make_env(
         allow_short=allow_short,
         action_mode=action_mode,
         include_wealth=include_wealth,
+        include_asset_id=include_asset_id,
         fixed_asset_id=fixed_asset_id,
     )
 
@@ -142,6 +144,7 @@ def main(config_path: str | None = None):
 
     print("Building environments...")
     action_mode = env_cfg.get("action_mode", "continuous")
+    include_asset_id = env_cfg.get("include_asset_id", True)
     transaction_cost_start = env_cfg.get("transaction_cost_start", env_cfg.get("transaction_cost", 0.0))
     transaction_cost_end = env_cfg.get("transaction_cost_end", transaction_cost_start)
     transaction_cost_steps = env_cfg.get("transaction_cost_steps", 1)
@@ -154,7 +157,7 @@ def main(config_path: str | None = None):
         f"warmup={transaction_cost_warmup}"
     )
     eval_episode_len = int(eval_cfg.get("episode_len", env_cfg["episode_length_steps"]))
-    print(f"Action mode: {action_mode}")
+    print(f"Action mode: {action_mode}, include_asset_id: {include_asset_id}")
     train_env = SubprocVecEnv(
         [
             make_env(
@@ -163,6 +166,7 @@ def main(config_path: str | None = None):
                 transaction_cost_start,
                 env_cfg["reward_scale"],
                 env_cfg["include_wealth"],
+                include_asset_id,
                 env_cfg.get("allow_short", True),
                 action_mode,
             )
@@ -177,6 +181,7 @@ def main(config_path: str | None = None):
                 transaction_cost_start,
                 env_cfg["reward_scale"],
                 env_cfg["include_wealth"],
+                include_asset_id,
                 env_cfg.get("allow_short", True),
                 action_mode,
                 fixed_asset_id=asset_id,
@@ -187,8 +192,9 @@ def main(config_path: str | None = None):
     eval_n_episodes = len(val_dataset.asset_ids)
     print(f"Evaluation setup: {eval_n_episodes} envs, one fixed asset per env, one episode per asset.")
     # number of assets, and whether to use asset embeddings
-    encoder_num_assets = num_assets if jepa_cfg.get("use_asset_embeddings", True) else None
-    print(f"Asset embeddings: {jepa_cfg.get('use_asset_embeddings', True)}, {encoder_num_assets} assets")
+    use_asset_embeddings = jepa_cfg.get("use_asset_embeddings", True) and include_asset_id
+    encoder_num_assets = num_assets if use_asset_embeddings else None
+    print(f"Asset embeddings: {use_asset_embeddings}, {encoder_num_assets} assets")
 
     print("Loading JEPA encoder...")
     jepa_context_encoder = PatchTSTEncoder(
