@@ -245,6 +245,7 @@ def main(config_path: str | None = None):
             jepa_loss_type=jepa_loss_type,
         ),
         net_arch=dict(pi=[256, 256], vf=[256, 256]),
+        activation_fn=torch.nn.ReLU
     )
 
     resume_path = resume_cfg.get("path")
