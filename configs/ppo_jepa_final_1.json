@@ -45,7 +45,7 @@
     "total_timesteps": 16000000,
     "learning_rate": 0.0001,
     "n_epochs": 2,
-    "batch_size": 512,
+    "batch_size": 1024,
     "gamma": 0.99,
     "gae_lambda": 0.95,
     "clip_range": 0.2,

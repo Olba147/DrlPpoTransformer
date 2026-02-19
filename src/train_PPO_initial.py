@@ -66,6 +66,7 @@ def make_env(
     allow_short: bool,
     action_mode: str,
     fixed_asset_id: str | None = None,
+    full_episode: bool = False,
 ):
     return lambda: GymTradingEnv(
         dataset,
@@ -77,6 +78,7 @@ def make_env(
         include_wealth=include_wealth,
         include_asset_id=include_asset_id,
         fixed_asset_id=fixed_asset_id,
+        full_episode=full_episode,
     )
 
 
@@ -169,6 +171,7 @@ def main(config_path: str | None = None):
                 include_asset_id,
                 env_cfg.get("allow_short", True),
                 action_mode,
+                full_episode=False,
             )
             for _ in range(env_cfg["n_envs"])
         ]
@@ -185,6 +188,7 @@ def main(config_path: str | None = None):
                 env_cfg.get("allow_short", True),
                 action_mode,
                 fixed_asset_id=asset_id,
+                full_episode=True,
             )
             for asset_id in val_dataset.asset_ids
         ]

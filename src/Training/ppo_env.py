@@ -29,6 +29,7 @@ class TradingEnv:
         include_wealth: bool = True,
         include_asset_id: bool = True,
         fixed_asset_id: Optional[str] = None,
+        full_episode: bool = False,
         seed: Optional[int] = None,
     ) -> None:
         self.dataset = dataset
@@ -51,11 +52,14 @@ class TradingEnv:
         if fixed_asset_id is not None and fixed_asset_id not in dataset.asset_ids:
             raise ValueError(f"Unknown fixed_asset_id: {fixed_asset_id}")
         self.fixed_asset_id = fixed_asset_id
+        self.full_episode = bool(full_episode)
 
         self.state: Optional[EnvState] = None
 
     def _sample_start(self) -> Tuple[str, int]:
         asset_id = self.fixed_asset_id or self.rng.choice(self.dataset.asset_ids)
+        if self.full_episode:
+            return asset_id, 0
         data_len = len(self.dataset.data_x[asset_id])
         max_start = data_len - self.seq_len - self.pred_len - self.episode_len
         if max_start <= 0:
@@ -129,7 +133,7 @@ class TradingEnv:
         self.state.w_prev = w_t
 
         done = (
-            self.state.step >= self.episode_len
+            (not self.full_episode and self.state.step >= self.episode_len)
             or (self.state.cursor + self.seq_len + self.pred_len) >= len(self.dataset.data_x[asset_id])
         )
 
@@ -159,6 +163,7 @@ class GymTradingEnv(gym.Env):
         include_wealth: bool = True,
         include_asset_id: bool = True,
         fixed_asset_id: Optional[str] = None,
+        full_episode: bool = False,
         seed: Optional[int] = None,
     ) -> None:
         super().__init__()
@@ -172,6 +177,7 @@ class GymTradingEnv(gym.Env):
             include_wealth=include_wealth,
             include_asset_id=include_asset_id,
             fixed_asset_id=fixed_asset_id,
+            full_episode=full_episode,
             seed=seed,
         )
 
