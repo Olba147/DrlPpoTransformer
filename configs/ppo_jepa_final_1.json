@@ -41,7 +41,7 @@
     "action_mode": "discrete_3"
   },
   "ppo": {
-    "rollout_length_steps": 1024,
+    "rollout_length_steps": 2048,
     "total_timesteps": 16000000,
     "learning_rate": 0.0001,
     "n_epochs": 4,
