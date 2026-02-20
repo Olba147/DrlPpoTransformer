@@ -46,7 +46,7 @@
     "learning_rate": 0.0001,
     "n_epochs": 4,
     "batch_size": 1024,
-    "gamma": 0.995,
+    "gamma": 0.998,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
     "ent_coef_start": 0.05,
