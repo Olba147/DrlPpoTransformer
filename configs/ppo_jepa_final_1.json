@@ -56,7 +56,7 @@
     "vf_coef": 0.7,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
-    "update_jepa": true,
+    "update_jepa": false,
     "jepa_loss_coef": 0.1,
     "jepa_loss_type": "smoothL1",
     "policy_learning_rate": 0.0001,
