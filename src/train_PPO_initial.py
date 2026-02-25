@@ -265,7 +265,7 @@ def main(config_path: str | None = None):
             target_len=dataset_cfg["target_len"],
             jepa_loss_type=jepa_loss_type,
         ),
-        net_arch=dict(pi=[512, 512], vf=[512, 512])
+        net_arch=dict(pi=[512, 512, 512], vf=[512, 512, 512])
     )
 
     resume_path = resume_cfg.get("path")
