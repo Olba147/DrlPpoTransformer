@@ -1,14 +1,11 @@
 import argparse
-import io
 import os
-import zipfile
 
 import numpy as np
 import torch
 import copy
 
 from config.config_utils import load_json_config
-from stable_baselines3.common.save_util import load_from_zip_file
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
@@ -96,26 +93,6 @@ def get_latest_checkpoint(dir_path: str) -> str | None:
         return None
     ckpts.sort(key=lambda p: os.path.getmtime(p))
     return ckpts[-1]
-
-
-def get_checkpoint_optimizer_group_count(checkpoint_path: str) -> int | None:
-    if not checkpoint_path or not os.path.exists(checkpoint_path):
-        return None
-    try:
-        with zipfile.ZipFile(checkpoint_path, "r") as zf:
-            if "policy.optimizer.pth" not in zf.namelist():
-                return None
-            optimizer_state = torch.load(
-                io.BytesIO(zf.read("policy.optimizer.pth")),
-                map_location="cpu",
-            )
-        param_groups = optimizer_state.get("param_groups")
-        if isinstance(param_groups, list):
-            return len(param_groups)
-        return None
-    except Exception as exc:
-        print(f"Warning: could not inspect optimizer groups from {checkpoint_path}: {exc}")
-        return None
 
 
 def main(config_path: str | None = None):
@@ -291,8 +268,34 @@ def main(config_path: str | None = None):
         net_arch=dict(pi=[512, 512, 512], vf=[512, 512, 512])
     )
 
-    def build_new_model() -> PPOWithJEPA:
-        return PPOWithJEPA(
+    resume_path = resume_cfg.get("path")
+    if resume_path is None and resume_cfg.get("auto_resume", False):
+        resume_path = get_latest_checkpoint(ppo_checkpoint_dir)
+        if resume_path:
+            print(f"Auto-resume from latest PPO checkpoint: {resume_path}")
+
+    if resume_path and os.path.exists(resume_path):
+        print(f"Resuming PPO from {resume_path}")
+        model = PPOWithJEPA.load(
+            resume_path,
+            env=train_env,
+            device=device,
+            custom_objects={"policy_kwargs": policy_kwargs},
+        )
+        model.tensorboard_log = log_root
+        model.update_jepa = ppo_cfg.get("update_jepa", True)
+        model.jepa_coef = ppo_cfg.get("jepa_loss_coef", 0.01)
+        model.optimizer_name = str(optimizer_name).lower()
+        model.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
+        model.policy_learning_rate = (
+            None if policy_learning_rate is None else float(policy_learning_rate)
+        )
+        model.jepa_learning_rate = (
+            None if jepa_learning_rate is None else float(jepa_learning_rate)
+        )
+        model.configure_optimizer()
+    else:
+        model = PPOWithJEPA(
             policy="MultiInputPolicy",
             env=train_env,
             learning_rate=ppo_cfg["learning_rate"],
@@ -317,56 +320,6 @@ def main(config_path: str | None = None):
             policy_learning_rate=policy_learning_rate,
             jepa_learning_rate=jepa_learning_rate,
         )
-
-    resume_path = resume_cfg.get("path")
-    if resume_path is None and resume_cfg.get("auto_resume", False):
-        resume_path = get_latest_checkpoint(ppo_checkpoint_dir)
-        if resume_path:
-            print(f"Auto-resume from latest PPO checkpoint: {resume_path}")
-
-    if resume_path and os.path.exists(resume_path):
-        expected_optimizer_groups = 2 if ppo_cfg.get("update_jepa", True) else 1
-        checkpoint_optimizer_groups = get_checkpoint_optimizer_group_count(resume_path)
-        if (
-            checkpoint_optimizer_groups is not None
-            and checkpoint_optimizer_groups != expected_optimizer_groups
-        ):
-            print(
-                "Optimizer param-group mismatch on resume: "
-                f"checkpoint={checkpoint_optimizer_groups}, expected={expected_optimizer_groups}. "
-                "Loading model weights with a freshly initialized optimizer."
-            )
-            model = build_new_model()
-            _, params, _ = load_from_zip_file(
-                resume_path,
-                device=device,
-                custom_objects={"policy_kwargs": policy_kwargs},
-            )
-            params.pop("policy.optimizer", None)
-            model.set_parameters(params, exact_match=False, device=device)
-            model.configure_optimizer()
-        else:
-            print(f"Resuming PPO from {resume_path}")
-            model = PPOWithJEPA.load(
-                resume_path,
-                env=train_env,
-                device=device,
-                custom_objects={"policy_kwargs": policy_kwargs},
-            )
-            model.tensorboard_log = log_root
-            model.update_jepa = ppo_cfg.get("update_jepa", True)
-            model.jepa_coef = ppo_cfg.get("jepa_loss_coef", 0.01)
-            model.optimizer_name = str(optimizer_name).lower()
-            model.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
-            model.policy_learning_rate = (
-                None if policy_learning_rate is None else float(policy_learning_rate)
-            )
-            model.jepa_learning_rate = (
-                None if jepa_learning_rate is None else float(jepa_learning_rate)
-            )
-            model.configure_optimizer()
-    else:
-        model = build_new_model()
 
     class JEPACheckpoint(BaseCallback):
         def __init__(self, jepa_model: JEPA, save_dir: str, every_n_steps: int):
