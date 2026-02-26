@@ -6,13 +6,14 @@ import torch
 import copy
 
 from config.config_utils import load_json_config
-from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
 from Training.callbacks import (
     CustomTensorboardCallback,
     EntropyScheduleCallback,
+    LastModelCallback,
     RewardEvalCallback,
     TransactionCostScheduleCallback,
 )
@@ -39,6 +40,10 @@ def _build_dataset_kwargs(cfg: dict) -> dict:
         "tickers": dataset_cfg.get("tickers"),
         "regular_hours_only": dataset_cfg.get("regular_hours_only", True),
         "timeframe": dataset_cfg.get("timeframe", "15min"),
+        "train_start_date": dataset_cfg.get("train_start_date"),
+        "train_end_date": dataset_cfg.get("train_end_date"),
+        "val_end_date": dataset_cfg.get("val_end_date"),
+        "test_end_date": dataset_cfg.get("test_end_date"),
     }
 
 
@@ -85,6 +90,14 @@ def make_env(
 def get_latest_checkpoint(dir_path: str) -> str | None:
     if not os.path.isdir(dir_path):
         return None
+    explicit_candidates = [
+        os.path.join(dir_path, "last_model.zip"),
+        os.path.join(dir_path, "best_model.zip"),
+    ]
+    for path in explicit_candidates:
+        if os.path.exists(path):
+            return path
+
     ckpts = []
     for fname in os.listdir(dir_path):
         if fname.startswith("ppo_") and fname.endswith("_steps.zip"):
@@ -109,9 +122,13 @@ def main(config_path: str | None = None):
 
     checkpoint_root = paths_cfg.get("checkpoint_root", "checkpoints")
     log_root = paths_cfg.get("log_root", "logs")
-    jepa_checkpoint_dir = paths_cfg["jepa_checkpoint_dir"]
+    jepa_checkpoint_dir = paths_cfg.get("jepa_checkpoint_dir")
     ppo_checkpoint_dir = os.path.join(checkpoint_root, model_name)
-    jepa_checkpoint_path = os.path.join(jepa_checkpoint_dir, "best.pt")
+    jepa_checkpoint_path = paths_cfg.get("jepa_checkpoint_path")
+    if not jepa_checkpoint_path:
+        if not jepa_checkpoint_dir:
+            raise ValueError("Set either paths.jepa_checkpoint_path or paths.jepa_checkpoint_dir in config.")
+        jepa_checkpoint_path = os.path.join(jepa_checkpoint_dir, "best.pt")
 
     run_dataset_kwargs = _build_dataset_kwargs(cfg)
 
@@ -373,11 +390,6 @@ def main(config_path: str | None = None):
             cost_warmup_timesteps=transaction_cost_warmup,
             eval_env=eval_env,
         ),
-        CheckpointCallback(
-            save_freq=eval_cfg["checkpoint_every_steps"],
-            save_path=ppo_checkpoint_dir,
-            name_prefix="ppo",
-        ),
         RewardEvalCallback(
             eval_env,
             best_model_save_path=f"{checkpoint_root}/{model_name}",
@@ -385,6 +397,11 @@ def main(config_path: str | None = None):
             eval_freq=eval_cfg["every_steps"],
             n_eval_episodes=eval_n_episodes,
             deterministic=True,
+            moving_average_window=eval_cfg.get("moving_average_window", 10),
+        ),
+        LastModelCallback(
+            save_path=f"{checkpoint_root}/{model_name}/last_model.zip",
+            verbose=1,
         ),
         JEPACheckpoint(
             jepa_model=jepa_model,

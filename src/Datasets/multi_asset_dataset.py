@@ -98,6 +98,10 @@ class Dataset_Finance_MultiAsset(Dataset):
         regular_hours_only: bool = True,
         timeframe: str = "1min",
         log_splits: bool = True,
+        train_start_date: str | None = None,
+        train_end_date: str | None = None,
+        val_end_date: str | None = None,
+        test_end_date: str | None = None,
     ):
         assert split in ["train", "val", "test"]
         self.set_type = {"train": 0, "val": 1, "test": 2}[split]
@@ -121,6 +125,10 @@ class Dataset_Finance_MultiAsset(Dataset):
         self.regular_hours_only = regular_hours_only
         self.timeframe = timeframe
         self.log_splits = log_splits
+        self.train_start_date = train_start_date
+        self.train_end_date = train_end_date
+        self.val_end_date = val_end_date
+        self.test_end_date = test_end_date
 
         self.asset_ids = []
         self.asset_id_to_idx = {}
@@ -256,17 +264,68 @@ class Dataset_Finance_MultiAsset(Dataset):
         if n_global == 0:
             return
 
-        num_train = int(n_global * self.train_split)
-        num_test = int(n_global * self.test_split)
-        num_val = n_global - num_train - num_test
+        date_params = (
+            self.train_start_date,
+            self.train_end_date,
+            self.val_end_date,
+            self.test_end_date,
+        )
+        use_window_splits = all(v is not None for v in date_params)
+        if not use_window_splits and any(v is not None for v in date_params):
+            raise ValueError(
+                "train_start_date, train_end_date, val_end_date, and test_end_date "
+                "must either all be provided or all be omitted."
+            )
 
-        train_end = global_dates[max(num_train - 1, 0)]
-        val_end = global_dates[max(num_train + num_val - 1, 0)]
+        if use_window_splits:
+            train_start = pd.to_datetime(self.train_start_date, utc=True)
+            train_end = pd.to_datetime(self.train_end_date, utc=True)
+            val_end = pd.to_datetime(self.val_end_date, utc=True)
+            test_end = pd.to_datetime(self.test_end_date, utc=True)
+
+            if not (train_start <= train_end < val_end < test_end):
+                raise ValueError(
+                    "Date boundaries must satisfy: "
+                    "train_start_date <= train_end_date < val_end_date < test_end_date."
+                )
+
+            global_min = global_dates[0]
+            global_max = global_dates[-1]
+            if train_start < global_min or test_end > global_max:
+                raise ValueError(
+                    f"Date boundaries must be within dataset range: "
+                    f"global_min={global_min}, global_max={global_max}."
+                )
+
+            train_mask_global = (global_dates >= train_start) & (global_dates <= train_end)
+            val_mask_global = (global_dates > train_end) & (global_dates <= val_end)
+            test_mask_global = (global_dates > val_end) & (global_dates <= test_end)
+            num_train = int(train_mask_global.sum())
+            num_val = int(val_mask_global.sum())
+            num_test = int(test_mask_global.sum())
+
+            if num_train == 0 or num_val == 0 or num_test == 0:
+                raise ValueError(
+                    "Provided date boundaries produce an empty split. "
+                    "Adjust train/val/test boundary dates."
+                )
+        else:
+            num_train = int(n_global * self.train_split)
+            num_test = int(n_global * self.test_split)
+            num_val = n_global - num_train - num_test
+
+            train_start = global_dates[0]
+            train_end = global_dates[max(num_train - 1, 0)]
+            val_end = global_dates[max(num_train + num_val - 1, 0)]
+            test_end = global_dates[-1]
 
         self.split_info = {
+            "split_mode": "window" if use_window_splits else "ratio",
             "global_total_rows": n_global,
+            "train_start": train_start,
             "train_end": train_end,
             "val_end": val_end,
+            "test_end": test_end,
             "num_train_dates": num_train,
             "num_val_dates": num_val,
             "num_test_dates": num_test,
@@ -274,8 +333,11 @@ class Dataset_Finance_MultiAsset(Dataset):
         if self.log_splits:
             print(
                 "[Dataset_Finance_MultiAsset] Global date splits:",
+                f"mode={self.split_info['split_mode']}",
+                f"train_start={train_start}",
                 f"train_end={train_end}",
                 f"val_end={val_end}",
+                f"test_end={test_end}",
                 f"n_dates={n_global}",
                 f"n_train={num_train}",
                 f"n_val={num_val}",
@@ -284,11 +346,11 @@ class Dataset_Finance_MultiAsset(Dataset):
 
         for asset_id, X, raw_ohlcv, dates, dt_final in asset_cache:
             if self.set_type == 0:
-                mask = dt_final <= train_end
+                mask = (dt_final >= train_start) & (dt_final <= train_end)
             elif self.set_type == 1:
                 mask = (dt_final > train_end) & (dt_final <= val_end)
             else:
-                mask = dt_final > val_end
+                mask = (dt_final > val_end) & (dt_final <= test_end)
 
             mask = mask.to_numpy()
             X_split = X[mask]

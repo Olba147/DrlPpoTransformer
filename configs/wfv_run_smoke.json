@@ -1,0 +1,41 @@
+{
+  "jepa_config": "configs/jepa_wfv_smoke.json",
+  "ppo_config": "configs/ppo_wfv_smoke.json",
+  "test_config": "configs/ppo_wfv_smoke.json",
+  "walk_forward": {
+    "first_window_jepa_epochs": 1,
+    "warm_start_jepa_epochs": 1,
+    "windows": [
+      {
+        "tag": "w000",
+        "train_start_date": "2021-02-26T15:00:00Z",
+        "train_end_date": "2021-05-25T23:59:59Z",
+        "val_end_date": "2021-06-25T23:59:59Z",
+        "test_end_date": "2021-07-25T23:59:59Z"
+      },
+      {
+        "tag": "w001",
+        "train_start_date": "2021-05-26T00:00:00Z",
+        "train_end_date": "2021-08-25T23:59:59Z",
+        "val_end_date": "2021-09-25T23:59:59Z",
+        "test_end_date": "2021-10-25T23:59:59Z"
+      },
+      {
+        "tag": "w002",
+        "train_start_date": "2021-08-26T00:00:00Z",
+        "train_end_date": "2021-11-25T23:59:59Z",
+        "val_end_date": "2021-12-25T23:59:59Z",
+        "test_end_date": "2022-01-25T23:59:59Z"
+      }
+    ],
+    "freeze_jepa_for_ppo": true,
+    "warm_start_jepa": true,
+    "warm_start_ppo": true
+  },
+  "output": {
+    "run_name": "wfv_smoke",
+    "checkpoint_root": "checkpoints/wfv",
+    "log_root": "logs/wfv",
+    "generated_config_dir": "configs/generated/wfv_smoke"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "model_name": "jepa6_ppo_final1",
+  "paths": {
+    "checkpoint_root": "checkpoints",
+    "log_root": "logs",
+    "jepa_checkpoint_dir": "checkpoints/jepa_initial6",
+    "ticker_list_path": "configs/assets/tickers1.txt",
+    "asset_universe_path": null
+  },
+  "resume": {
+    "path": null,
+    "auto_resume": true
+  },
+  "dataset": {
+    "root_path": "Data/polygon",
+    "data_path": "data_raw_1m",
+    "start_date": null,
+    "split": "train",
+    "context_len": 512,
+    "target_len": 48,
+    "use_time_features": true,
+    "rolling_window": 252,
+    "train_split": 0.7,
+    "test_split": 0.15,
+    "tickers": null,
+    "regular_hours_only": true,
+    "timeframe": "15min"
+  },
+  "env": {
+    "episode_length_steps": 2048,
+    "n_envs": 16,
+    "transaction_cost_start": 0.0005,
+    "transaction_cost_end": 0.0005,
+    "transaction_cost_steps": 0,
+    "transaction_cost_schedule_timesteps": 6000000,
+    "transaction_cost_warmup": 0,
+    "include_wealth": true,
+    "include_asset_id": false,
+    "reward_scale": 10.0,
+    "allow_short": true,
+    "action_mode": "discrete_3"
+  },
+  "ppo": {
+    "rollout_length_steps": 2048,
+    "total_timesteps": 20000000,
+    "learning_rate": 0.0001,
+    "n_epochs": 4,
+    "batch_size": 2048,
+    "gamma": 0.998,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef_start": 0.05,
+    "ent_coef_end": 0.02,
+    "ent_decay_steps": 8000000,
+    "ent_warmup_fraction": 0.0,
+    "vf_coef": 0.7,
+    "max_grad_norm": 0.5,
+    "target_kl": 0.015,
+    "update_jepa": false,
+    "jepa_loss_coef": 0.1,
+    "jepa_loss_type": "smoothL1",
+    "policy_learning_rate": 0.0001,
+    "jepa_learning_rate": 0.00001
+  },
+  "evaluation": {
+    "episodes": 1,
+    "episode_len": 4000,
+    "every_steps": 5000,
+    "checkpoint_every_steps": 20000
+  },
+  "jepa_model": {
+    "patch_len": 8,
+    "patch_stride": 8,
+    "d_model": 192,
+    "n_features": 9,
+    "n_time_features": 2,
+    "nhead": 4,
+    "num_layers": 4,
+    "dim_ff": 768,
+    "dropout": 0.0,
+    "add_cls": true,
+    "pooling": "cls",
+    "pred_len": 48,
+    "ema_tau_min": 0.99,
+    "ema_tau_max": 0.999,
+    "use_asset_embeddings": false
+  }
+}

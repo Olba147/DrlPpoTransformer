@@ -1,0 +1,62 @@
+{
+  "jepa_config": "configs/jepa_wfv.json",
+  "ppo_config": "configs/ppo_wfv.json",
+  "test_config": "configs/ppo_wfv.json",
+  "walk_forward": {
+    "first_window_jepa_epochs": 200,
+    "warm_start_jepa_epochs": 60,
+    "windows": [
+      {
+        "tag": "w000",
+        "train_start_date": "2021-02-26T15:00:00Z",
+        "train_end_date": "2024-02-25T23:59:59Z",
+        "val_end_date": "2024-05-25T23:59:59Z",
+        "test_end_date": "2024-08-25T23:59:59Z"
+      },
+      {
+        "tag": "w001",
+        "train_start_date": "2021-05-26T00:00:00Z",
+        "train_end_date": "2024-05-25T23:59:59Z",
+        "val_end_date": "2024-08-25T23:59:59Z",
+        "test_end_date": "2024-11-25T23:59:59Z"
+      },
+      {
+        "tag": "w002",
+        "train_start_date": "2021-08-26T00:00:00Z",
+        "train_end_date": "2024-08-25T23:59:59Z",
+        "val_end_date": "2024-11-25T23:59:59Z",
+        "test_end_date": "2025-02-25T23:59:59Z"
+      },
+      {
+        "tag": "w003",
+        "train_start_date": "2021-11-26T00:00:00Z",
+        "train_end_date": "2024-11-25T23:59:59Z",
+        "val_end_date": "2025-02-25T23:59:59Z",
+        "test_end_date": "2025-05-25T23:59:59Z"
+      },
+      {
+        "tag": "w004",
+        "train_start_date": "2022-02-26T00:00:00Z",
+        "train_end_date": "2025-02-25T23:59:59Z",
+        "val_end_date": "2025-05-25T23:59:59Z",
+        "test_end_date": "2025-08-25T23:59:59Z"
+      },
+      {
+        "tag": "w005",
+        "train_start_date": "2022-05-26T00:00:00Z",
+        "train_end_date": "2025-05-25T23:59:59Z",
+        "val_end_date": "2025-08-25T23:59:59Z",
+        "test_end_date": "2025-11-25T23:59:59Z"
+      }
+    ],
+    "freeze_jepa_for_ppo": true,
+    "warm_start_jepa": true,
+    "warm_start_ppo": true
+  },
+  "output": {
+    "run_name": "wfv_run1",
+    "checkpoint_root": "checkpoints/wfv",
+    "log_root": "logs/wfv",
+    "generated_config_dir": "configs/generated/wfv_run1"
+  }
+}

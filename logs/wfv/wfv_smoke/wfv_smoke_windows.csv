@@ -1,0 +1,4 @@
+window,train_start,train_end,val_end,test_end,jepa_checkpoint,ppo_checkpoint,window_index
+w000,2021-02-26T15:00:00+00:00,2021-05-25T23:59:59+00:00,2021-06-25T23:59:59+00:00,2021-07-25T23:59:59+00:00,checkpoints\wfv\wfv_smoke\wfv_smoke_jepa_w000\best.pt,checkpoints\wfv\wfv_smoke\wfv_smoke_ppo_w000\best_model.zip,
+w001,2021-05-26T00:00:00+00:00,2021-08-25T23:59:59+00:00,2021-09-25T23:59:59+00:00,2021-10-25T23:59:59+00:00,checkpoints\wfv\wfv_smoke\wfv_smoke_jepa_w001\best.pt,checkpoints\wfv\wfv_smoke\wfv_smoke_ppo_w001\best_model.zip,
+w002,2021-08-26T00:00:00+00:00,2021-11-25T23:59:59+00:00,2021-12-25T23:59:59+00:00,2022-01-25T23:59:59+00:00,checkpoints\wfv\wfv_smoke\wfv_smoke_jepa_w002\best.pt,checkpoints\wfv\wfv_smoke\wfv_smoke_ppo_w002\best_model.zip,2.0

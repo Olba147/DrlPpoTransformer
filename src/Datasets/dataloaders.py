@@ -81,6 +81,7 @@ class DataLoaders:
 
     def _make_loader(self, split, shuffle=False):
         dataset = self.datasetCLS(split=split, **self.dataset_kwargs)
+        effective_prefetch_factor = self.prefetch_factor if self.num_workers > 0 else None
         return DataLoader(
             dataset,
             batch_size=self.batch_size_train if split == "train" else self.batch_size_eval,
@@ -89,7 +90,7 @@ class DataLoaders:
             pin_memory=self.pin_memory,
             drop_last=self.drop_last_train if split == "train" else self.drop_last_eval,
             persistent_workers=self.persistent_workers,
-            prefetch_factor=self.prefetch_factor,
+            prefetch_factor=effective_prefetch_factor,
         )
         
 

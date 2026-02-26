@@ -1,0 +1,62 @@
+{
+  "model_name": "jepa_wfv_smoke",
+  "paths": {
+    "checkpoint_root": "checkpoints",
+    "log_root": "logs"
+  },
+  "dataset": {
+    "root_path": "Data/polygon",
+    "data_path": "data_raw_1m",
+    "start_date": null,
+    "split": "train",
+    "context_len": 128,
+    "target_len": 16,
+    "use_time_features": true,
+    "rolling_window": 252,
+    "train_split": 0.7,
+    "test_split": 0.15,
+    "regular_hours_only": true,
+    "timeframe": "15min"
+  },
+  "training": {
+    "epochs": 1,
+    "batch_size_train": 64,
+    "batch_size_eval": 64,
+    "learning_rate": 0.0003,
+    "log_every": 50,
+    "checkpoint_every_epochs": 10,
+    "dont_save_for_epochs": 0,
+    "amp": true,
+    "grad_clip": 1.0,
+    "num_workers": 0,
+    "pin_memory": false,
+    "drop_last_train": false,
+    "drop_last_eval": false,
+    "persistent_workers": false,
+    "prefetch_factor": 2,
+    "warmup_epochs": 1
+  },
+  "jepa_model": {
+    "patch_len": 8,
+    "patch_stride": 8,
+    "d_model": 192,
+    "n_features": 9,
+    "n_time_features": 2,
+    "nhead": 4,
+    "num_layers": 4,
+    "dim_ff": 768,
+    "dropout": 0.0,
+    "add_cls": true,
+    "pooling": "cls",
+    "pred_len": 16,
+    "ema_tau_min": 0.99,
+    "ema_tau_max": 0.999,
+    "use_asset_embeddings": false
+  },
+  "loss": {
+    "loss_type": "smoothL1",
+    "var_loss": false,
+    "var_loss_gamma": 1.0,
+    "var_loss_weight": 0.0
+  }
+}

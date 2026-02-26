@@ -27,6 +27,10 @@ def _build_dataset_kwargs(cfg: dict) -> dict:
         "test_split": dataset_cfg["test_split"],
         "regular_hours_only": dataset_cfg.get("regular_hours_only", True),
         "timeframe": dataset_cfg.get("timeframe", "15min"),
+        "train_start_date": dataset_cfg.get("train_start_date"),
+        "train_end_date": dataset_cfg.get("train_end_date"),
+        "val_end_date": dataset_cfg.get("val_end_date"),
+        "test_end_date": dataset_cfg.get("test_end_date"),
     }
 
 def _get_loss_fn(cfg: dict) -> torch.nn.Module:
@@ -44,6 +48,7 @@ def main(config_path: str):
 
     model_name = cfg["model_name"]
     paths_cfg = cfg["paths"]
+    resume_cfg = cfg.get("resume", {})
     train_cfg = cfg["training"]
     model_cfg = cfg["jepa_model"]
     loss_cfg = cfg["loss"]
@@ -102,7 +107,9 @@ def main(config_path: str):
     )
 
     checkpoint_dir = os.path.join(paths_cfg.get("checkpoint_root", "checkpoints"), model_name)
-    checkpoint_path = os.path.join(checkpoint_dir, "best.pt")
+    checkpoint_path = resume_cfg.get("path") or os.path.join(checkpoint_dir, "best.pt")
+    if resume_cfg.get("path"):
+        print(f"Using explicit JEPA resume path: {checkpoint_path}")
     if os.path.exists(checkpoint_path):
         print(f"Loading model weights from {checkpoint_path}")
         try:
@@ -112,9 +119,12 @@ def main(config_path: str):
                 print(f"Missing keys in checkpoint: {missing}")
             if unexpected:
                 print(f"Unexpected keys in checkpoint: {unexpected}")
-            epoch = checkpoint["epoch"]
-            monitor = checkpoint["monitor"]
-            print(f"Loaded model weights from {checkpoint_path} at epoch {epoch} with monitor {monitor}")
+            epoch = int(checkpoint.get("epoch", -1)) + 1
+            monitor = checkpoint.get("monitor")
+            print(
+                f"Loaded model weights from {checkpoint_path} "
+                f"(resume start_epoch={epoch}, monitor={monitor})"
+            )
         except Exception:
             print(f"Failed to load model weights from {checkpoint_path}")
             epoch = 0
@@ -156,9 +166,10 @@ def main(config_path: str):
             dirpath=f"{checkpoint_root}/{model_name}",
             monitor="val_loss",
             mode="min",
-            every_n_epochs=train_cfg["checkpoint_every_epochs"],
             filename_best="best.pt",
-            dont_save_for_epochs=10,
+            dont_save_for_epochs=train_cfg.get("dont_save_for_epochs", 10),
+            save_last=True,
+            filename_last="last.pt",
         ),
     ]
 

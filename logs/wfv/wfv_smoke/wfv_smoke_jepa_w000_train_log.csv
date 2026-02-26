@@ -1,0 +1,6 @@
+epoch,train_loss,val_loss,train_cosine_similarity,train_std_ctx,train_std_tgt
+0,0.017144648450046356,0.005057426799526986,0.9816943068896801,0.0078111933126166775,0.14552023575287049
+epoch,train_loss,val_loss,train_cosine_similarity,train_std_ctx,train_std_tgt
+1,0.05042729550070994,0.08872854791871913,0.9468534698431519,nan,nan
+epoch,train_loss,val_loss,train_cosine_similarity,train_std_ctx,train_std_tgt
+2,0.08344423812772427,0.08814791551271042,0.9094693084481728,nan,nan

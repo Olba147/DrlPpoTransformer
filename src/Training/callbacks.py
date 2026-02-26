@@ -205,7 +205,8 @@ class CSVLogger(Callback):
 
 class CheckpointCallback(Callback):
     """
-    Saves best model by monitor metric (default val_loss) and optional periodic snapshots.
+    Saves best model by monitor metric (default val_loss), optional periodic snapshots,
+    and optional final model at the end of fit.
     """
     order = 70
 
@@ -216,7 +217,9 @@ class CheckpointCallback(Callback):
         mode: str = "min",           # 'min' or 'max'
         every_n_epochs: Optional[int] = None,
         filename_best: str = "best.pt",
-        dont_save_for_epochs: Optional[int] = 0
+        dont_save_for_epochs: Optional[int] = 0,
+        save_last: bool = False,
+        filename_last: str = "last.pt",
     ):
         os.makedirs(dirpath, exist_ok=True)
         self.dir = dirpath
@@ -226,6 +229,8 @@ class CheckpointCallback(Callback):
         self.filename_best = filename_best
         self.best = math.inf if mode == "min" else -math.inf
         self.dont_save_for_epochs = dont_save_for_epochs
+        self.save_last = bool(save_last)
+        self.filename_last = filename_last
 
     def _is_better(self, current: float) -> bool:
         return current < self.best if self.mode == "min" else current > self.best
@@ -273,6 +278,19 @@ class CheckpointCallback(Callback):
             payload.update(self._extra_checkpoint_data())
             torch.save(payload, path)
             print(f"[ckpt] Saved periodic to {path}")
+
+    def after_fit(self):
+        if not self.save_last:
+            return
+        path = os.path.join(self.dir, self.filename_last)
+        payload = {
+            "model": self.learn.model.state_dict(),
+            "epoch": self.learn.epoch,
+            "monitor": getattr(self.learn, f"epoch_{self.monitor}", None),
+        }
+        payload.update(self._extra_checkpoint_data())
+        torch.save(payload, path)
+        print(f"[ckpt] Saved final to {path}")
 
 
 class CustomTensorboardCallback(BaseCallback):
@@ -352,10 +370,25 @@ class CustomTensorboardCallback(BaseCallback):
 
 
 class RewardEvalCallback(EvalCallback):
-    def __init__(self, *args, trade_eps: float = 1e-8, append_existing_log: bool = True, **kwargs):
+    def __init__(
+        self,
+        *args,
+        trade_eps: float = 1e-8,
+        append_existing_log: bool = True,
+        moving_average_window: int = 10,
+        **kwargs,
+    ):
+        moving_average_window = max(1, int(moving_average_window))
+        best_model_save_path = kwargs.get("best_model_save_path")
+        # Disable EvalCallback's default best-on-single-eval logic.
+        kwargs["best_model_save_path"] = None
         super().__init__(*args, **kwargs)
         self.trade_eps = float(trade_eps)
         self.append_existing_log = bool(append_existing_log)
+        self.moving_average_window = moving_average_window
+        self.best_model_save_path_ma = best_model_save_path
+        self.best_moving_average_reward = -np.inf
+        self._eval_reward_history: list[float] = []
         self._eval_trade_counts_by_env: dict[int, int] = {}
         self._eval_bh_logret_by_env: dict[int, float] = {}
         self._last_eval_episode_excess_returns: list[float] = []
@@ -422,7 +455,30 @@ class RewardEvalCallback(EvalCallback):
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0 and self.evaluations_results:
             eval_rewards = np.asarray(self.evaluations_results[-1], dtype=np.float64)
             if eval_rewards.size:
-                self.logger.record("custom/eval_episode_reward_mean", float(np.mean(eval_rewards)))
+                mean_eval_reward = float(np.mean(eval_rewards))
+                self._eval_reward_history.append(mean_eval_reward)
+                self.logger.record("custom/eval_episode_reward_mean", mean_eval_reward)
+
+                if len(self._eval_reward_history) >= self.moving_average_window:
+                    window_vals = self._eval_reward_history[-self.moving_average_window :]
+                    moving_avg = float(np.mean(window_vals))
+                    self.logger.record("custom/eval_reward_ma", moving_avg)
+                    self.logger.record("custom/eval_reward_ma_window", int(self.moving_average_window))
+                    if (
+                        self.best_model_save_path_ma
+                        and moving_avg > self.best_moving_average_reward
+                    ):
+                        self.best_moving_average_reward = moving_avg
+                        os.makedirs(self.best_model_save_path_ma, exist_ok=True)
+                        best_path = os.path.join(self.best_model_save_path_ma, "best_model")
+                        self.model.save(best_path)
+                        self.logger.record("custom/eval_reward_ma_best", moving_avg)
+                        if self.verbose >= 1:
+                            print(
+                                "[RewardEvalCallback] Saved new best model "
+                                f"(MA{self.moving_average_window}={moving_avg:.6f}) to "
+                                f"{best_path}.zip"
+                            )
             if self._last_eval_episode_excess_returns:
                 self.logger.record(
                     "custom/eval_excess_return_mean",
@@ -443,6 +499,21 @@ class RewardEvalCallback(EvalCallback):
                             float(np.mean(eval_rewards) / mean_len),
                         )
         return continue_training
+
+
+class LastModelCallback(BaseCallback):
+    def __init__(self, save_path: str, verbose: int = 0):
+        super().__init__(verbose=verbose)
+        self.save_path = save_path
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_training_end(self) -> None:
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        self.model.save(self.save_path)
+        if self.verbose >= 1:
+            print(f"[LastModelCallback] Saved final model to {self.save_path}")
 
 
 class EntropyScheduleCallback(BaseCallback):
