@@ -397,7 +397,7 @@ def main(config_path: str | None = None):
             eval_freq=eval_cfg["every_steps"],
             n_eval_episodes=eval_n_episodes,
             deterministic=True,
-            moving_average_window=eval_cfg.get("moving_average_window", 10),
+            moving_average_window=eval_cfg.get("moving_average_window", 20),
         ),
         LastModelCallback(
             save_path=f"{checkpoint_root}/{model_name}/last_model.zip",

@@ -375,7 +375,7 @@ class RewardEvalCallback(EvalCallback):
         *args,
         trade_eps: float = 1e-8,
         append_existing_log: bool = True,
-        moving_average_window: int = 10,
+        moving_average_window: int = 20,
         **kwargs,
     ):
         moving_average_window = max(1, int(moving_average_window))

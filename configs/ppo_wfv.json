@@ -42,16 +42,16 @@
   },
   "ppo": {
     "rollout_length_steps": 2048,
-    "total_timesteps": 20000000,
+    "total_timesteps": 30000000,
     "learning_rate": 0.0001,
     "n_epochs": 4,
     "batch_size": 2048,
-    "gamma": 0.998,
+    "gamma": 0.995,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
     "ent_coef_start": 0.05,
     "ent_coef_end": 0.02,
-    "ent_decay_steps": 8000000,
+    "ent_decay_steps": 6000000,
     "ent_warmup_fraction": 0.0,
     "vf_coef": 0.7,
     "max_grad_norm": 0.5,
@@ -66,7 +66,8 @@
     "episodes": 1,
     "episode_len": 4000,
     "every_steps": 5000,
-    "checkpoint_every_steps": 20000
+    "checkpoint_every_steps": 20000,
+    "moving_average_window": 20
   },
   "jepa_model": {
     "patch_len": 8,
