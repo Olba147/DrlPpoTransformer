@@ -82,7 +82,11 @@ def _upsert_window_manifest(manifest_path: Path, run_name: str, window_entry: di
     pd.DataFrame(windows).to_csv(manifest_path.with_suffix(".csv"), index=False)
 
 
-def main(config_path: str | None = None, window_index: int | None = None) -> None:
+def main(
+    config_path: str | None = None,
+    window_index: int | None = None,
+    stage: str = "all",
+) -> None:
     cfg = load_json_config(config_path, DEFAULT_CONFIG_PATH, __file__)
 
     jepa_cfg_path = cfg["jepa_config"]
@@ -160,6 +164,10 @@ def main(config_path: str | None = None, window_index: int | None = None) -> Non
         f"train={pd.Timestamp(train_start)}..{pd.Timestamp(train_end)} "
         f"val_end={pd.Timestamp(val_end)} test_end={pd.Timestamp(test_end)}"
     )
+    stage = str(stage).lower()
+    valid_stages = {"all", "jepa", "ppo", "test"}
+    if stage not in valid_stages:
+        raise ValueError(f"Invalid stage '{stage}'. Use one of: {sorted(valid_stages)}")
 
     jepa_cfg = copy.deepcopy(base_jepa_cfg)
     jepa_cfg["model_name"] = jepa_model_name
@@ -202,67 +210,81 @@ def main(config_path: str | None = None, window_index: int | None = None) -> Non
     test_cfg_path_out = Path(generated_cfg_dir) / f"{window_tag}_test.json"
 
     _write_json(jepa_cfg_path_out, jepa_cfg)
-    print(f"[WFV] Training JEPA ({window_tag})")
-    train_jepa_main(str(jepa_cfg_path_out))
-
     window_jepa_dir = Path(run_checkpoint_root) / jepa_model_name
     current_jepa_ckpt = str(window_jepa_dir / "best.pt")
+    if stage in {"all", "jepa"}:
+        print(f"[WFV] Training JEPA ({window_tag})")
+        train_jepa_main(str(jepa_cfg_path_out))
     if not Path(current_jepa_ckpt).exists():
         raise FileNotFoundError(
-            f"Missing JEPA best checkpoint for {window_tag}: {current_jepa_ckpt}"
+            f"Missing JEPA best checkpoint for {window_tag}: {current_jepa_ckpt}. "
+            "Run JEPA stage first."
         )
+
     ppo_cfg["paths"]["jepa_checkpoint_path"] = current_jepa_ckpt
     _write_json(ppo_cfg_path_out, ppo_cfg)
 
-    print(f"[WFV] Training PPO ({window_tag})")
-    train_ppo_main(str(ppo_cfg_path_out))
-
     window_ppo_dir = Path(run_checkpoint_root) / ppo_model_name
+    if stage in {"all", "ppo"}:
+        print(f"[WFV] Training PPO ({window_tag})")
+        train_ppo_main(str(ppo_cfg_path_out))
+
     current_ppo_ckpt = str(window_ppo_dir / "best_model.zip")
-    if not Path(current_ppo_ckpt).exists():
-        raise FileNotFoundError(
-            f"Missing PPO best checkpoint for {window_tag}: {current_ppo_ckpt}"
-        )
+    if stage in {"all", "test"}:
+        if not Path(current_ppo_ckpt).exists():
+            raise FileNotFoundError(
+                f"Missing PPO best checkpoint for {window_tag}: {current_ppo_ckpt}. "
+                "Run PPO stage first."
+            )
 
-    test_cfg_local = copy.deepcopy(base_test_cfg)
-    test_cfg_local["model_name"] = ppo_model_name
-    test_cfg_local["paths"]["checkpoint_root"] = run_checkpoint_root
-    test_cfg_local["paths"]["log_root"] = run_log_root
-    test_cfg_local["paths"]["jepa_checkpoint_path"] = current_jepa_ckpt
-    _set_window_dates(test_cfg_local, train_start, train_end, val_end, test_end)
-    test_cfg_local["test"] = {
-        "split": "test",
-        "ppo_checkpoint_path": current_ppo_ckpt,
-        "jepa_checkpoint_path": current_jepa_ckpt,
-        "output_prefix": ppo_model_name,
-    }
-    _write_json(test_cfg_path_out, test_cfg_local)
+        test_cfg_local = copy.deepcopy(base_test_cfg)
+        test_cfg_local["model_name"] = ppo_model_name
+        test_cfg_local["paths"]["checkpoint_root"] = run_checkpoint_root
+        test_cfg_local["paths"]["log_root"] = run_log_root
+        test_cfg_local["paths"]["jepa_checkpoint_path"] = current_jepa_ckpt
+        _set_window_dates(test_cfg_local, train_start, train_end, val_end, test_end)
+        test_cfg_local["test"] = {
+            "split": "test",
+            "ppo_checkpoint_path": current_ppo_ckpt,
+            "jepa_checkpoint_path": current_jepa_ckpt,
+            "output_prefix": ppo_model_name,
+        }
+        _write_json(test_cfg_path_out, test_cfg_local)
 
-    print(f"[WFV] Testing PPO ({window_tag})")
-    test_ppo_main(str(test_cfg_path_out))
+        print(f"[WFV] Testing PPO ({window_tag})")
+        test_ppo_main(str(test_cfg_path_out))
 
-    window_entry = {
-        "window": window_tag,
-        "window_index": int(window_index),
-        "train_start": pd.Timestamp(train_start).isoformat(),
-        "train_end": pd.Timestamp(train_end).isoformat(),
-        "val_end": pd.Timestamp(val_end).isoformat(),
-        "test_end": pd.Timestamp(test_end).isoformat(),
-        "jepa_checkpoint": current_jepa_ckpt,
-        "ppo_checkpoint": current_ppo_ckpt,
-    }
-    manifest_path = Path(run_log_root) / f"{run_name}_windows.json"
-    _upsert_window_manifest(manifest_path=manifest_path, run_name=run_name, window_entry=window_entry)
-    print(f"[WFV] Completed {window_tag} (index={window_index}). Manifest: {manifest_path}")
+        window_entry = {
+            "window": window_tag,
+            "window_index": int(window_index),
+            "train_start": pd.Timestamp(train_start).isoformat(),
+            "train_end": pd.Timestamp(train_end).isoformat(),
+            "val_end": pd.Timestamp(val_end).isoformat(),
+            "test_end": pd.Timestamp(test_end).isoformat(),
+            "jepa_checkpoint": current_jepa_ckpt,
+            "ppo_checkpoint": current_ppo_ckpt,
+        }
+        manifest_path = Path(run_log_root) / f"{run_name}_windows.json"
+        _upsert_window_manifest(manifest_path=manifest_path, run_name=run_name, window_entry=window_entry)
+        print(f"[WFV] Completed {window_tag} (index={window_index}). Manifest: {manifest_path}")
+    else:
+        print(f"[WFV] Completed stage '{stage}' for {window_tag} (index={window_index}).")
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run walk-forward JEPA+PPO training/testing")
     parser.add_argument("--config", type=str, default=None, help="Path to WFV json config")
     parser.add_argument("--window", type=int, required=True, help="Window index to run")
+    parser.add_argument(
+        "--stage",
+        type=str,
+        default="all",
+        choices=["all", "jepa", "ppo", "test"],
+        help="Which stage to run for the selected window",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    main(config_path=args.config, window_index=args.window)
+    main(config_path=args.config, window_index=args.window, stage=args.stage)
