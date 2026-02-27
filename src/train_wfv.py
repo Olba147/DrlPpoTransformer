@@ -115,6 +115,7 @@ def main(config_path: str | None = None, window_index: int | None = None) -> Non
     warm_start_ppo = bool(wf_cfg.get("warm_start_ppo", True))
     first_window_jepa_epochs = wf_cfg.get("first_window_jepa_epochs")
     warm_start_jepa_epochs = wf_cfg.get("warm_start_jepa_epochs")
+    warm_start_ppo_timesteps = wf_cfg.get("warm_start_ppo_timesteps")
     explicit_windows_cfg = wf_cfg.get("windows")
     if not explicit_windows_cfg:
         raise ValueError("walk_forward.windows is required and must contain at least one window.")
@@ -181,12 +182,20 @@ def main(config_path: str | None = None, window_index: int | None = None) -> Non
     ppo_cfg["paths"]["checkpoint_root"] = run_checkpoint_root
     ppo_cfg["paths"]["log_root"] = run_log_root
     _set_window_dates(ppo_cfg, train_start, train_end, val_end, test_end)
+    is_warm_start_ppo_window = bool(prev_ppo_ckpt and warm_start_ppo)
     if freeze_jepa_for_ppo:
         ppo_cfg.setdefault("ppo", {})["update_jepa"] = False
     ppo_cfg["resume"] = {
-        "path": prev_ppo_ckpt if warm_start_ppo else None,
+        "path": prev_ppo_ckpt if is_warm_start_ppo_window else None,
         "auto_resume": False,
     }
+    if is_warm_start_ppo_window and warm_start_ppo_timesteps is not None:
+        effective_ppo_steps = max(1, int(warm_start_ppo_timesteps))
+        ppo_cfg["ppo"]["total_timesteps"] = effective_ppo_steps
+        print(
+            f"[WFV] PPO warm-start timesteps ({window_tag}) = {effective_ppo_steps} "
+            f"(warm_start_ppo_timesteps={effective_ppo_steps})"
+        )
 
     jepa_cfg_path_out = Path(generated_cfg_dir) / f"{window_tag}_jepa.json"
     ppo_cfg_path_out = Path(generated_cfg_dir) / f"{window_tag}_ppo.json"
