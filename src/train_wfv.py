@@ -124,6 +124,11 @@ def main(
     if not explicit_windows_cfg:
         raise ValueError("walk_forward.windows is required and must contain at least one window.")
     explicit_windows = _normalize_explicit_windows(explicit_windows_cfg)
+    if window_index == -1:
+        for idx in range(len(explicit_windows)):
+            print(f"[WFV] Running window {idx}/{len(explicit_windows)-1}")
+            main(config_path=config_path, window_index=idx, stage=stage)
+        return
     if window_index is None:
         raise ValueError("window_index is required. Pass --window <index>.")
     if window_index < 0 or window_index >= len(explicit_windows):
@@ -274,7 +279,7 @@ def main(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run walk-forward JEPA+PPO training/testing")
     parser.add_argument("--config", type=str, default=None, help="Path to WFV json config")
-    parser.add_argument("--window", type=int, required=True, help="Window index to run")
+    parser.add_argument("--window", type=str, required=True, help="Window index to run, or 'all'")
     parser.add_argument(
         "--stage",
         type=str,
@@ -287,4 +292,8 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = _parse_args()
-    main(config_path=args.config, window_index=args.window, stage=args.stage)
+    if str(args.window).lower() == "all":
+        parsed_window = -1
+    else:
+        parsed_window = int(args.window)
+    main(config_path=args.config, window_index=parsed_window, stage=args.stage)
