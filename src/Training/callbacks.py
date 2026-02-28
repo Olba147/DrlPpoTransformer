@@ -237,6 +237,7 @@ class CheckpointCallback(Callback):
 
     def _extra_checkpoint_data(self) -> Dict[str, Any]:
         extra: Dict[str, Any] = {}
+        extra["global_step"] = int(getattr(self.learn, "global_step", 0))
         train_dl = getattr(self.learn, "train_dl", None)
         dataset = getattr(train_dl, "dataset", None)
         if dataset is None:

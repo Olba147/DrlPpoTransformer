@@ -120,17 +120,20 @@ def main(config_path: str):
             if unexpected:
                 print(f"Unexpected keys in checkpoint: {unexpected}")
             epoch = int(checkpoint.get("epoch", -1)) + 1
+            global_step = int(checkpoint.get("global_step", 0))
             monitor = checkpoint.get("monitor")
             print(
                 f"Loaded model weights from {checkpoint_path} "
-                f"(resume start_epoch={epoch}, monitor={monitor})"
+                f"(resume start_epoch={epoch}, global_step={global_step}, monitor={monitor})"
             )
         except Exception:
             print(f"Failed to load model weights from {checkpoint_path}")
             epoch = 0
+            global_step = 0
     else:
         print("There is no best model, starting training from zero")
         epoch = 0
+        global_step = 0
 
     loss_fn = _get_loss_fn(loss_cfg)
 
@@ -183,6 +186,7 @@ def main(config_path: str):
         amp=train_cfg.get("amp", True),
         grad_clip=train_cfg.get("grad_clip", 1.0),
         start_epoch=epoch,
+        global_step=global_step,
         var_loss=loss_cfg.get("var_loss", False),
         var_loss_gamma=loss_cfg.get("var_loss_gamma", 1.0),
         var_loss_weight=loss_cfg.get("var_loss_weight", 0.0),
