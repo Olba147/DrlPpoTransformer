@@ -4,8 +4,8 @@
   "test_config": "configs/ppo_wfv.json",
   "walk_forward": {
     "first_window_jepa_epochs": 200,
-    "warm_start_jepa_epochs": 60,
-    "warm_start_ppo_timesteps": 10000000,
+    "warm_start_jepa_epochs": 50,
+    "warm_start_ppo_timesteps": 20000000,
     "windows": [
       {
         "tag": "w000",
