@@ -5,7 +5,7 @@
   "walk_forward": {
     "first_window_jepa_epochs": 200,
     "warm_start_jepa_epochs": 50,
-    "warm_start_ppo_timesteps": 20000000,
+    "warm_start_ppo_timesteps": 10000000,
     "windows": [
       {
         "tag": "w000",
@@ -16,35 +16,35 @@
       },
       {
         "tag": "w001",
-        "train_start_date": "2021-05-26T00:00:00Z",
+        "train_start_date": "2021-02-26T15:00:00Z",
         "train_end_date": "2024-05-25T23:59:59Z",
         "val_end_date": "2024-08-25T23:59:59Z",
         "test_end_date": "2024-11-25T23:59:59Z"
       },
       {
         "tag": "w002",
-        "train_start_date": "2021-08-26T00:00:00Z",
+        "train_start_date": "2021-02-26T15:00:00Z",
         "train_end_date": "2024-08-25T23:59:59Z",
         "val_end_date": "2024-11-25T23:59:59Z",
         "test_end_date": "2025-02-25T23:59:59Z"
       },
       {
         "tag": "w003",
-        "train_start_date": "2021-11-26T00:00:00Z",
+        "train_start_date": "2021-02-26T15:00:00Z",
         "train_end_date": "2024-11-25T23:59:59Z",
         "val_end_date": "2025-02-25T23:59:59Z",
         "test_end_date": "2025-05-25T23:59:59Z"
       },
       {
         "tag": "w004",
-        "train_start_date": "2022-02-26T00:00:00Z",
+        "train_start_date": "2021-02-26T15:00:00Z",
         "train_end_date": "2025-02-25T23:59:59Z",
         "val_end_date": "2025-05-25T23:59:59Z",
         "test_end_date": "2025-08-25T23:59:59Z"
       },
       {
         "tag": "w005",
-        "train_start_date": "2022-05-26T00:00:00Z",
+        "train_start_date": "2021-02-26T15:00:00Z",
         "train_end_date": "2025-05-25T23:59:59Z",
         "val_end_date": "2025-08-25T23:59:59Z",
         "test_end_date": "2025-11-25T23:59:59Z"
