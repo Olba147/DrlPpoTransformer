@@ -199,7 +199,7 @@ def main(config_path: str):
             monitor="val_loss",
             mode="min",
             filename_best="best.pt",
-            dont_save_for_epochs=train_cfg.get("dont_save_for_epochs", 10),
+            dont_save_for_epochs=train_cfg.get("dont_save_for_epochs", 3),
             save_last=True,
             filename_last="last.pt",
         ),
