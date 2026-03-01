@@ -184,9 +184,11 @@ class Learner:
 
                 # calculate cosine similarity for each batch for tracking
                 with torch.no_grad():
-                    self.cosine_similarity = F.cosine_similarity(pred[0], pred[1], dim=1).mean().item()
-                    self.std_ctx = pred[0].std(dim=0).mean().item()
-                    self.std_tgt = pred[1].std(dim=0).mean().item()
+                    pred_ctx = pred[0].reshape(-1, pred[0].shape[-1])
+                    pred_tgt = pred[1].reshape(-1, pred[1].shape[-1])
+                    self.cosine_similarity = F.cosine_similarity(pred_ctx, pred_tgt, dim=-1).mean().item()
+                    self.std_ctx = pred_ctx.std(dim=0).mean().item()
+                    self.std_tgt = pred_tgt.std(dim=0).mean().item()
                     cos_sum += self.cosine_similarity
                     std_ctx_sum += self.std_ctx
                     std_tgt_sum += self.std_tgt
