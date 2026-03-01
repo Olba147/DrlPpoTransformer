@@ -5,7 +5,7 @@
   "walk_forward": {
     "first_window_jepa_epochs": 50,
     "warm_start_jepa_epochs": 20,
-    "warm_start_ppo_timesteps": 10000000,
+    "warm_start_ppo_timesteps": 5000000,
     "windows": [
       {
         "tag": "w000",
