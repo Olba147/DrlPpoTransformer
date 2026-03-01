@@ -18,7 +18,7 @@
     "timeframe": "15min"
   },
   "training": {
-    "epochs": 200,
+    "epochs": 40,
     "batch_size_train": 256,
     "batch_size_eval": 256,
     "learning_rate": 0.0003,
@@ -32,7 +32,7 @@
     "drop_last_eval": false,
     "persistent_workers": true,
     "prefetch_factor": 2,
-    "warmup_epochs": 50
+    "warmup_epochs": 15
   },
   "jepa_model": {
     "patch_len": 8,
