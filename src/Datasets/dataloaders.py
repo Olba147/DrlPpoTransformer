@@ -29,7 +29,7 @@ class DataLoaders:
                             e.g. {
                                 "root_path": "...",
                                 "data_path": "polygon/data_raw_1m",
-                                "size": [512, 96],  # label_len ignored by your __getitem__
+                                "size": 512,
                                 "rolling_window": 256,
                                 "use_time_features": True,
                                 "time_col_name": "timestamp",

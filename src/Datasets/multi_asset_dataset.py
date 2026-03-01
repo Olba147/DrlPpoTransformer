@@ -79,7 +79,7 @@ class Dataset_Finance_MultiAsset(Dataset):
     """
     Multi-asset dataset for Polygon parquet files.
     Keeps per-asset preprocessing and z-score history isolated.
-    Returns the same keys as Dataset_Finance.
+    Returns context-only samples for JEPA/PPO pipelines.
     """
     def __init__(
         self,
@@ -87,7 +87,7 @@ class Dataset_Finance_MultiAsset(Dataset):
         data_path: str,
         start_date: str = None,
         split: str = "train",             # 'train' | 'val' | 'test'
-        size=None,                        # [seq_len, pred_len]
+        size=None,                        # seq_len or [seq_len]
         use_time_features: bool = True,   # kept for parity (returned)
         train_split: float = 0.7,
         test_split: float = 0.15,
@@ -108,9 +108,12 @@ class Dataset_Finance_MultiAsset(Dataset):
 
         if size is None:
             self.seq_len = 96
-            self.pred_len = 24
+        elif isinstance(size, (list, tuple)):
+            if len(size) < 1:
+                raise ValueError("size must contain at least seq_len.")
+            self.seq_len = int(size[0])
         else:
-            self.seq_len, self.pred_len = size
+            self.seq_len = int(size)
 
         self.root_path = root_path
         self.data_path = data_path
@@ -251,7 +254,7 @@ class Dataset_Finance_MultiAsset(Dataset):
                 continue
             df = pd.read_parquet(fpath)
             X, raw_ohlcv, dates, dt_final = self._load_asset(df=df)
-            if len(X) < (self.seq_len + self.pred_len + 1):
+            if len(X) < self.seq_len:
                 continue
             asset_cache.append((asset_id, X, raw_ohlcv, dates, dt_final))
             global_dates.append(dt_final)
@@ -357,7 +360,7 @@ class Dataset_Finance_MultiAsset(Dataset):
             ohlcv_split = raw_ohlcv[mask]
             dates_split = dates[mask]
 
-            if len(X_split) < (self.seq_len + self.pred_len):
+            if len(X_split) < self.seq_len:
                 continue
 
             self.asset_ids.append(asset_id)
@@ -365,7 +368,7 @@ class Dataset_Finance_MultiAsset(Dataset):
             self.ohlcv[asset_id] = ohlcv_split
             self.dates[asset_id] = dates_split
 
-            max_start = len(X_split) - self.seq_len - self.pred_len + 1
+            max_start = len(X_split) - self.seq_len + 1
             for i in range(max_start):
                 self.index_registry.append((asset_id, i))
 
@@ -378,25 +381,14 @@ class Dataset_Finance_MultiAsset(Dataset):
 
         s_begin = i
         s_end = s_begin + self.seq_len
-        r_begin = s_end
-        r_end = s_end + self.pred_len
-
         x_context = self.data_x[asset_id][s_begin:s_end]
-        x_target = self.data_x[asset_id][r_begin:r_end]
-
         ohlcv_context = self.ohlcv[asset_id][s_begin:s_end]
-        ohlcv_target = self.ohlcv[asset_id][r_begin:r_end]
-
         dates_context = self.dates[asset_id][s_begin:s_end]
-        dates_target = self.dates[asset_id][r_begin:r_end]
 
         return {
             "x_context": torch.from_numpy(x_context).float(),
-            "x_target": torch.from_numpy(x_target).float(),
             "t_context": torch.from_numpy(dates_context).float(),
-            "t_target": torch.from_numpy(dates_target).float(),
             "ohlcv_context": torch.from_numpy(ohlcv_context).float(),
-            "ohlcv_target": torch.from_numpy(ohlcv_target).float(),
             "asset_id": torch.tensor(asset_idx, dtype=torch.long),
         }
 

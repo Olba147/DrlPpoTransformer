@@ -3,6 +3,7 @@ import copy
 import os
 
 import torch
+import torch.nn as nn
 
 from config.config_utils import load_json_config
 from Datasets.dataloaders import DataLoaders
@@ -20,7 +21,7 @@ def _build_dataset_kwargs(cfg: dict) -> dict:
         "data_path": dataset_cfg["data_path"],
         "start_date": dataset_cfg.get("start_date"),
         "split": dataset_cfg.get("split", "train"),
-        "size": [dataset_cfg["context_len"], dataset_cfg["target_len"]],
+        "size": dataset_cfg["context_len"],
         "use_time_features": dataset_cfg.get("use_time_features", True),
         "rolling_window": dataset_cfg["rolling_window"],
         "train_split": dataset_cfg["train_split"],
@@ -41,6 +42,27 @@ def _get_loss_fn(cfg: dict) -> torch.nn.Module:
 
     else:
         raise ValueError(f"Unknown loss type: {cfg['loss_type']}")
+
+
+class MaskedJEPAPretrainModel(nn.Module):
+    def __init__(self, jepa_model: JEPA):
+        super().__init__()
+        self.jepa_model = jepa_model
+        self.ema_tau_min = jepa_model.ema_tau_min
+        self.ema_tau_max = jepa_model.ema_tau_max
+
+    def forward(self, X_ctx, T_ctx, asset_id=None):
+        return self.jepa_model.forward_masked(X_ctx, T_ctx, asset_id=asset_id)
+
+    @torch.no_grad()
+    def ema_update(self, decay):
+        self.jepa_model.ema_update(decay)
+
+    def state_dict(self, *args, **kwargs):
+        return self.jepa_model.state_dict(*args, **kwargs)
+
+    def load_state_dict(self, *args, **kwargs):
+        return self.jepa_model.load_state_dict(*args, **kwargs)
 
 
 def main(config_path: str):
@@ -91,7 +113,6 @@ def main(config_path: str):
         dropout=model_cfg["dropout"],
         add_cls=model_cfg.get("add_cls", True),
         pooling=model_cfg["pooling"],
-        pred_len=model_cfg["pred_len"],
         num_assets=encoder_num_assets,
     )
 
@@ -104,6 +125,11 @@ def main(config_path: str):
         d_model=model_cfg["d_model"],
         ema_tau_min=model_cfg["ema_tau_min"],
         ema_tau_max=model_cfg["ema_tau_max"],
+        nhead=model_cfg["nhead"],
+        dim_ff=model_cfg["dim_ff"],
+        dropout=model_cfg["dropout"],
+        predictor_num_layers=model_cfg.get("predictor_num_layers", 2),
+        mask_ratio=model_cfg.get("mask_ratio", 0.5),
     )
 
     checkpoint_dir = os.path.join(paths_cfg.get("checkpoint_root", "checkpoints"), model_name)
@@ -138,7 +164,10 @@ def main(config_path: str):
     loss_fn = _get_loss_fn(loss_cfg)
 
     opt = torch.optim.Adam(
-        list(jepa_model.context_enc.parameters()) + list(jepa_model.predictor.parameters()),
+        list(jepa_model.context_enc.parameters())
+        + list(jepa_model.predictor.parameters())
+        + list(jepa_model.predictor_norm.parameters())
+        + [jepa_model.mask_token],
         lr=train_cfg["learning_rate"],
     )
 
@@ -149,7 +178,7 @@ def main(config_path: str):
             patch_len=model_cfg["patch_len"],
             stride=model_cfg["patch_stride"],
             context_key="x_context",
-            target_key="x_target",
+            target_key="__unused__",
             replace=True,
             do_on_train=True,
             do_on_val=True,
@@ -158,7 +187,7 @@ def main(config_path: str):
             patch_len=model_cfg["patch_len"],
             stride=model_cfg["patch_stride"],
             context_key="t_context",
-            target_key="t_target",
+            target_key="__unused__",
             replace=True,
             do_on_train=True,
             do_on_val=True,
@@ -177,7 +206,7 @@ def main(config_path: str):
     ]
 
     learn = Learner(
-        model=jepa_model,
+        model=MaskedJEPAPretrainModel(jepa_model),
         train_dl=train_loader,
         val_dl=val_loader,
         loss_func=loss_fn,

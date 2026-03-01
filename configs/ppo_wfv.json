@@ -17,7 +17,6 @@
     "start_date": null,
     "split": "train",
     "context_len": 512,
-    "target_len": 96,
     "use_time_features": true,
     "rolling_window": 252,
     "train_split": 0.7,
@@ -81,7 +80,8 @@
     "dropout": 0.0,
     "add_cls": true,
     "pooling": "cls",
-    "pred_len": 96,
+    "mask_ratio": 0.5,
+    "predictor_num_layers": 2,
     "ema_tau_min": 0.99,
     "ema_tau_max": 0.999,
     "use_asset_embeddings": false

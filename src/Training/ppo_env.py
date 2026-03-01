@@ -41,7 +41,6 @@ class TradingEnv:
         self.include_wealth = include_wealth
         self.include_asset_id = include_asset_id
         self.seq_len = dataset.seq_len
-        self.pred_len = dataset.pred_len
         self.rng = np.random.default_rng(seed)
         self._discrete_actions = np.array([-1.0, 0.0, 1.0], dtype=np.float32)
 
@@ -61,9 +60,9 @@ class TradingEnv:
         if self.full_episode:
             return asset_id, 0
         data_len = len(self.dataset.data_x[asset_id])
-        max_start = data_len - self.seq_len - self.pred_len - self.episode_len
+        max_start = data_len - self.seq_len - self.episode_len
         if max_start <= 0:
-            max_start = max(0, data_len - self.seq_len - 2)
+            max_start = max(0, data_len - self.seq_len - 1)
         start = int(self.rng.integers(0, max_start + 1))
         return asset_id, start
 
@@ -74,17 +73,9 @@ class TradingEnv:
         asset_idx = self.dataset.asset_id_to_idx.get(asset_id, -1)
         x_context = self.dataset.data_x[asset_id][cursor : cursor + self.seq_len]
         t_context = self.dataset.dates[asset_id][cursor : cursor + self.seq_len]
-        x_target = self.dataset.data_x[asset_id][
-            cursor + self.seq_len : cursor + self.seq_len + self.dataset.pred_len
-        ]
-        t_target = self.dataset.dates[asset_id][
-            cursor + self.seq_len : cursor + self.seq_len + self.dataset.pred_len
-        ]
         obs = {
             "x_context": x_context.astype(np.float32),
             "t_context": t_context.astype(np.float32),
-            "x_target": x_target.astype(np.float32),
-            "t_target": t_target.astype(np.float32),
             "w_prev": np.array([w_prev], dtype=np.float32),
         }
         if self.include_asset_id:
@@ -134,7 +125,7 @@ class TradingEnv:
 
         done = (
             (not self.full_episode and self.state.step >= self.episode_len)
-            or (self.state.cursor + self.seq_len + self.pred_len) >= len(self.dataset.data_x[asset_id])
+            or (self.state.cursor + self.seq_len) >= len(self.dataset.data_x[asset_id])
         )
 
         obs = self._observe(asset_id, self.state.cursor, self.state.w_prev, self.state.wealth)
@@ -182,7 +173,6 @@ class GymTradingEnv(gym.Env):
         )
 
         seq_len = dataset.seq_len
-        pred_len = dataset.pred_len
         n_features = dataset.data_x[dataset.asset_ids[0]].shape[-1]
         n_time_features = dataset.dates[dataset.asset_ids[0]].shape[-1]
         obs_spaces = {
@@ -191,12 +181,6 @@ class GymTradingEnv(gym.Env):
             ),
             "t_context": spaces.Box(
                 low=-np.inf, high=np.inf, shape=(seq_len, n_time_features), dtype=np.float32
-            ),
-            "x_target": spaces.Box(
-                low=-np.inf, high=np.inf, shape=(pred_len, n_features), dtype=np.float32
-            ),
-            "t_target": spaces.Box(
-                low=-np.inf, high=np.inf, shape=(pred_len, n_time_features), dtype=np.float32
             ),
             "w_prev": spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
         }

@@ -20,6 +20,15 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         return x + self.pe[:, :x.size(1), :]
 
+    def gather(self, indices: torch.Tensor) -> torch.Tensor:
+        """
+        indices: [B, K]
+        returns: [B, K, D]
+        """
+        base = self.pe.expand(indices.size(0), -1, -1)
+        gather_idx = indices.unsqueeze(-1).expand(-1, -1, base.size(-1))
+        return base.gather(1, gather_idx)
+
 class PatchTSTEncoder(nn.Module):
     """
     Inputs:
@@ -49,12 +58,11 @@ class PatchTSTEncoder(nn.Module):
         dropout: float = 0.1,
         add_cls: bool = True,
         pooling: str = "cls",        # "cls" | "mean"
-        pred_len: int = 96,
         num_assets: int | None = None,
     ):
         super().__init__()
         self.patch_len = patch_len
-        self.add_cls, self.pooling, self.pred_len = add_cls, pooling, pred_len
+        self.add_cls, self.pooling = add_cls, pooling
 
         self.n_features = n_features
         self.n_time_features = n_time_features
@@ -80,6 +88,12 @@ class PatchTSTEncoder(nn.Module):
 
         self.head = nn.Identity()
 
+    def get_patch_positional_embeddings(self, indices: torch.Tensor) -> torch.Tensor:
+        pos_indices = indices.long()
+        if self.add_cls:
+            pos_indices = pos_indices + 1
+        return self.posenc.gather(pos_indices)
+
     def _encode_time_patch(self, time_cont_patch: torch.Tensor) -> torch.Tensor:
         """
         time_cont_patch: [B, N, patch_len*2] with (weekday, minute_of_day) flattened per step
@@ -99,14 +113,20 @@ class PatchTSTEncoder(nn.Module):
         time_sc = torch.cat([wd_sc, mod_sc], dim=-1)    # [B, N, P, 4]
         return time_sc.reshape(B, N, P * 4)             # [B, N, P*4]
 
-    def forward(self, X_patch: torch.Tensor, time_cont_patch: torch.Tensor, asset_id: torch.Tensor | None = None):
+    def forward(
+        self,
+        X_patch: torch.Tensor,
+        time_cont_patch: torch.Tensor,
+        asset_id: torch.Tensor | None = None,
+        return_tokens: bool = False,
+    ):
         """
         X_patch        : [B, N, patch_len*6]
         time_cont_patch: [B, N, patch_len*2]
         asset_id: [B]
         Returns:
-          task='embedding' -> [B, d_model]
-          task='forecast'  -> [B, pred_len]
+          pooled embedding -> [B, d_model]
+          token sequence   -> [B, N, d_model] when return_tokens=True
         """
         # Project price & time separately, then fuse
         Tp_flat = self._encode_time_patch(time_cont_patch)   # [B, N, P*4]
@@ -127,6 +147,8 @@ class PatchTSTEncoder(nn.Module):
         z = self.final_norm(z)
 
         # Readout
+        if return_tokens:
+            return z[:, 1:] if self.add_cls else z
         if self.add_cls and self.pooling == "cls":
             return z[:, 0]                                # [B, D]
         elif self.pooling == "mean":

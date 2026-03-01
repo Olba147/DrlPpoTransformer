@@ -32,7 +32,7 @@ def _build_dataset_kwargs(cfg: dict) -> dict:
         "data_path": dataset_cfg["data_path"],
         "start_date": dataset_cfg.get("start_date"),
         "split": dataset_cfg.get("split", "train"),
-        "size": [dataset_cfg["context_len"], dataset_cfg["target_len"]],
+        "size": dataset_cfg["context_len"],
         "use_time_features": dataset_cfg.get("use_time_features", True),
         "rolling_window": dataset_cfg["rolling_window"],
         "train_split": dataset_cfg["train_split"],
@@ -229,7 +229,6 @@ def main(config_path: str | None = None):
         dropout=jepa_cfg["dropout"],
         add_cls=jepa_cfg.get("add_cls", True),
         pooling=jepa_cfg["pooling"],
-        pred_len=jepa_cfg["pred_len"],
         num_assets=encoder_num_assets,
     )
 
@@ -241,6 +240,11 @@ def main(config_path: str | None = None):
         d_model=jepa_cfg["d_model"],
         ema_tau_min=jepa_cfg["ema_tau_min"],
         ema_tau_max=jepa_cfg["ema_tau_max"],
+        nhead=jepa_cfg["nhead"],
+        dim_ff=jepa_cfg["dim_ff"],
+        dropout=jepa_cfg["dropout"],
+        predictor_num_layers=jepa_cfg.get("predictor_num_layers", 2),
+        mask_ratio=jepa_cfg.get("mask_ratio", 0.5),
     )
 
     checkpoint_path = jepa_checkpoint_path
@@ -278,8 +282,6 @@ def main(config_path: str | None = None):
             embedding_dim=jepa_cfg["d_model"],
             patch_len=jepa_cfg["patch_len"],
             patch_stride=jepa_cfg["patch_stride"],
-            use_obs_targets=True,
-            target_len=dataset_cfg["target_len"],
             jepa_loss_type=jepa_loss_type,
         ),
         net_arch=dict(pi=[256, 256], vf=[512, 512])

@@ -1,69 +1,105 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 class JEPA(nn.Module):
-    def __init__(self, context_enc, target_enc, d_model, ema_tau_min, ema_tau_max):
+    def __init__(
+        self,
+        context_enc,
+        target_enc,
+        d_model,
+        ema_tau_min,
+        ema_tau_max,
+        nhead,
+        dim_ff,
+        dropout,
+        predictor_num_layers=2,
+        mask_ratio=0.5,
+    ):
         super().__init__()
         self.context_enc = context_enc
-        self.target_enc  = target_enc
-        
-        self.ema_tau_min = ema_tau_min
-        self.ema_tau_max   = ema_tau_max
+        self.target_enc = target_enc
 
-        self.predictor = nn.Sequential(
-            nn.Linear(d_model, 2*d_model),
-            nn.GELU(),
-            nn.Linear(2*d_model, 2*d_model),
-            nn.GELU(),
-            nn.Linear(2*d_model, d_model),
-            nn.LayerNorm(d_model)
+        self.ema_tau_min = ema_tau_min
+        self.ema_tau_max = ema_tau_max
+        self.mask_ratio = float(mask_ratio)
+
+        self.mask_token = nn.Parameter(torch.empty(1, 1, d_model))
+        nn.init.normal_(self.mask_token, std=0.02)
+
+        predictor_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_ff,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
         )
+        self.predictor = nn.TransformerEncoder(
+            predictor_layer,
+            num_layers=int(predictor_num_layers),
+        )
+        self.predictor_norm = nn.LayerNorm(d_model)
 
         self.target_enc.load_state_dict(self.context_enc.state_dict())
         for p in self.target_enc.parameters():
             p.requires_grad_(False)
-        
-        # projector with normalization
-        # def make_projector():
-        #     return nn.Sequential(
-        #         nn.Linear(d_model, d_model),
-        #         nn.LayerNorm(d_model),
-        #         nn.GELU(),
-        #         nn.Linear(d_model, d_model),
-        #     )
 
-        # self.proj_online = make_projector()
-        # self.proj_target = make_projector()   # EMA-updated copy
-        
-        # small predictor split to inject action between layers
+    def generate_masks(self, B: int, N: int, device) -> tuple[torch.Tensor, torch.Tensor]:
+        num_masked = int(N * self.mask_ratio)
+        num_masked = max(1, min(N - 1, num_masked))
 
+        perm = torch.argsort(torch.rand(B, N, device=device), dim=1)
+        target_indices = perm[:, :num_masked]
+        context_indices = perm[:, num_masked:]
+        target_indices, _ = torch.sort(target_indices, dim=1)
+        context_indices, _ = torch.sort(context_indices, dim=1)
+        return context_indices, target_indices
 
-        # make sure that target encoder is initialized the same as context encoder
-        
-        # for p in self.proj_target.parameters():
-        #     p.requires_grad_(False)
+    @staticmethod
+    def _gather_tokens(x: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
+        gather_idx = indices.unsqueeze(-1).expand(-1, -1, x.size(-1))
+        return x.gather(1, gather_idx)
 
-        # self.proj_target.load_state_dict(self.proj_online.state_dict())
+    def forward_masked(self, X_ctx, T_ctx, asset_id=None):
+        B, N = X_ctx.shape[:2]
+        context_indices, target_indices = self.generate_masks(B, N, X_ctx.device)
 
-    def forward(self, X_ctx, T_ctx, X_tgt, T_tgt, asset_id=None):
+        X_ctx_visible = self._gather_tokens(X_ctx, context_indices)
+        T_ctx_visible = self._gather_tokens(T_ctx, context_indices)
 
-        # z_c = self.proj_online(self.context_enc(X_ctx, T_ctx, asset_id=asset_id))        # [B, D]
-        z_c = self.context_enc(X_ctx, T_ctx, asset_id=asset_id)                          # [B, D]
+        z_context = self.context_enc(
+            X_ctx_visible,
+            T_ctx_visible,
+            asset_id=asset_id,
+            return_tokens=True,
+        )
+
         with torch.no_grad():
             self.target_enc.eval()
-            # self.proj_target.eval()
-            # z_t = self.proj_target(self.target_enc(X_tgt, T_tgt, asset_id=asset_id))     # [B, D]
-            z_t = self.target_enc(X_tgt, T_tgt, asset_id=asset_id)                        # [B, D]
-        p_c = self.predictor(z_c)                                                        # [B, D]
-        # return F.normalize(p_c, dim=-1), F.normalize(z_t, dim=-1), p_c, z_t
-        return p_c, z_t
+            z_target_full = self.target_enc(
+                X_ctx,
+                T_ctx,
+                asset_id=asset_id,
+                return_tokens=True,
+            )
+            z_target = self._gather_tokens(z_target_full, target_indices)
+
+        num_masked = target_indices.size(1)
+        mask_tokens = self.mask_token.expand(B, num_masked, -1)
+        pos_tokens = self.context_enc.get_patch_positional_embeddings(target_indices)
+        masked_targets = mask_tokens + pos_tokens
+
+        predictor_input = torch.cat([z_context, masked_targets], dim=1)
+        pred_all = self.predictor_norm(self.predictor(predictor_input))
+        pred_masked = pred_all[:, -num_masked:, :]
+        return pred_masked, z_target
+
+    def forward(self, X_ctx, T_ctx, asset_id=None):
+        return self.forward_masked(X_ctx, T_ctx, asset_id=asset_id)
 
     @torch.no_grad()
     def ema_update(self, decay):
-
-        # take the last index of ema_rate if epoch > len(ema_rate)
         for pt, pc in zip(self.target_enc.parameters(), self.context_enc.parameters()):
-            pt.data.mul_(decay).add_(pc.data, alpha=1.0 - decay)        
-        # for pt, pc in zip(self.proj_target.parameters(), self.proj_online.parameters()):
-        #     pt.data.mul_(decay).add_(pc.data, alpha=1.0 - decay)
+            pt.data.mul_(decay).add_(pc.data, alpha=1.0 - decay)

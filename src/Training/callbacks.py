@@ -87,8 +87,8 @@ def make_patches(x: torch.Tensor, patch_len: int, stride: int) -> torch.Tensor:
 
 class PatchingCallback(Callback):
     """
-    Creates train-time patches from batch["x_context"] / ["x_target"] and writes them back.
-    - By default, replaces x_context/x_target with patched tensors (set replace=False to keep originals).
+    Creates train-time patches from batch[context_key] and, if present, batch[target_key].
+    - By default, replaces the source tensors with patched tensors (set replace=False to keep originals).
     - Adds keys "..._patched" if replace=False.
     """
     order = -10  # run early
@@ -98,7 +98,7 @@ class PatchingCallback(Callback):
         patch_len: int,
         stride: int,
         context_key: str = "x_context",
-        target_key: str = "x_target",
+        target_key: str | None = None,
         replace: bool = True,
         do_on_train: bool = True,
         do_on_val: bool = True,
@@ -125,7 +125,7 @@ class PatchingCallback(Callback):
 
         # Patch target if present
         x_tgt_p = None
-        if self.tgt_k in batch:
+        if self.tgt_k and self.tgt_k in batch:
             x_tgt = batch[self.tgt_k]
             if x_tgt.ndim >= 2 and x_tgt.shape[1] >= self.P:
                 x_tgt_p = make_patches(x_tgt, self.P, self.S)  # [B, N_t, P*C]

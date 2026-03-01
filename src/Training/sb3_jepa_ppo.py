@@ -26,9 +26,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         embedding_dim: int,
         patch_len: int,
         patch_stride: int,
-        use_obs_targets: bool = False,
-        target_ratio: float | None = 0.5,
-        target_len: int | None = None,
         jepa_loss_type: str = "mse",
     ) -> None:
         w_prev_dim = observation_space["w_prev"].shape[0] if "w_prev" in observation_space.spaces else 0
@@ -47,9 +44,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         self.embedding_dim = embedding_dim
         self.patch_len = patch_len
         self.patch_stride = patch_stride
-        self.use_obs_targets = use_obs_targets
-        self.target_ratio = target_ratio
-        self.target_len = target_len
         self.asset_dim = asset_dim
         self.jepa_loss_type = jepa_loss_type.lower()
 
@@ -76,17 +70,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
             asset_id = asset_id.squeeze(1)
         return asset_id.long()
 
-    def _split_context(self, x: th.Tensor) -> tuple[th.Tensor, th.Tensor]:
-        seq_len = x.shape[1]
-        if self.target_len is not None:
-            tgt_len = min(max(1, self.target_len), seq_len - 1)
-            split_idx = seq_len - tgt_len
-        else:
-            ratio = self.target_ratio if self.target_ratio is not None else 0.5
-            split_idx = max(1, int(seq_len * ratio))
-            split_idx = min(seq_len - 1, split_idx)
-        return x[:, :split_idx], x[:, split_idx:]
-
     def _patch(self, x: th.Tensor) -> th.Tensor:
         return make_patches(x, self.patch_len, self.patch_stride)
 
@@ -98,17 +81,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         t_context = self._ensure_batched(observations["t_context"])
         asset_id = self._get_asset_id(observations)
 
-        # Build JEPA targets
-        if self.use_obs_targets and "x_target" in observations and "t_target" in observations:
-            x_target = self._ensure_batched(observations["x_target"])
-            t_target = self._ensure_batched(observations["t_target"])
-        else:
-            x_ctx_split, x_target = self._split_context(x_context)
-            t_ctx_split, t_target = self._split_context(t_context)
-            x_context = x_ctx_split
-            t_context = t_ctx_split
-
-        if x_context.shape[1] < self.patch_len or x_target.shape[1] < self.patch_len:
+        if x_context.shape[1] < self.patch_len:
             self.last_jepa_loss = None
             self.last_pred_std = None
             self.last_tgt_std = None
@@ -116,10 +89,8 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
 
         x_ctx_p = self._patch(x_context)
         t_ctx_p = self._patch(t_context)
-        x_tgt_p = self._patch(x_target)
-        t_tgt_p = self._patch(t_target)
 
-        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, x_tgt_p, t_tgt_p, asset_id=asset_id)
+        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, asset_id=asset_id)
         if self.jepa_loss_type == "mse":
             loss = F.mse_loss(p_c, z_t)
         elif self.jepa_loss_type in {"smoothl1", "smooth_l1"}:

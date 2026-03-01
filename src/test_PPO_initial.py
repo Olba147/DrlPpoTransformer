@@ -23,7 +23,7 @@ def _build_dataset_kwargs(cfg: dict, split: str) -> dict:
         "data_path": dataset_cfg["data_path"],
         "start_date": dataset_cfg.get("start_date"),
         "split": split,
-        "size": [dataset_cfg["context_len"], dataset_cfg["target_len"]],
+        "size": dataset_cfg["context_len"],
         "use_time_features": dataset_cfg.get("use_time_features", True),
         "rolling_window": dataset_cfg["rolling_window"],
         "train_split": dataset_cfg["train_split"],
@@ -105,7 +105,6 @@ def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_pa
         dropout=jepa_cfg["dropout"],
         add_cls=jepa_cfg.get("add_cls", True),
         pooling=jepa_cfg["pooling"],
-        pred_len=jepa_cfg["pred_len"],
         num_assets=num_assets if jepa_cfg.get("use_asset_embeddings", False) else None,
     )
 
@@ -120,7 +119,6 @@ def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_pa
         dropout=jepa_cfg["dropout"],
         add_cls=jepa_cfg.get("add_cls", True),
         pooling=jepa_cfg["pooling"],
-        pred_len=jepa_cfg["pred_len"],
         num_assets=num_assets if jepa_cfg.get("use_asset_embeddings", False) else None,
     )
 
@@ -130,6 +128,11 @@ def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_pa
         d_model=jepa_cfg["d_model"],
         ema_tau_min=jepa_cfg["ema_tau_min"],
         ema_tau_max=jepa_cfg["ema_tau_max"],
+        nhead=jepa_cfg["nhead"],
+        dim_ff=jepa_cfg["dim_ff"],
+        dropout=jepa_cfg["dropout"],
+        predictor_num_layers=jepa_cfg.get("predictor_num_layers", 2),
+        mask_ratio=jepa_cfg.get("mask_ratio", 0.5),
     )
 
     if os.path.exists(checkpoint_path):
@@ -189,8 +192,7 @@ def eval_asset(
     ohlcv = dataset.ohlcv[asset_id]
 
     seq_len = dataset.seq_len
-    pred_len = dataset.pred_len
-    n_steps = len(X) - seq_len - pred_len
+    n_steps = len(X) - seq_len
     if n_steps <= 0:
         return {}
 
@@ -206,18 +208,11 @@ def eval_asset(
     for cursor in range(n_steps):
         x_context = X[cursor : cursor + seq_len].astype(np.float32)
         t_context = dates[cursor : cursor + seq_len].astype(np.float32)
-        x_target = X[cursor + seq_len : cursor + seq_len + pred_len].astype(np.float32)
-        t_target = dates[cursor + seq_len : cursor + seq_len + pred_len].astype(np.float32)
-
         obs = {}
         if "x_context" in obs_space_keys:
             obs["x_context"] = x_context
         if "t_context" in obs_space_keys:
             obs["t_context"] = t_context
-        if "x_target" in obs_space_keys:
-            obs["x_target"] = x_target
-        if "t_target" in obs_space_keys:
-            obs["t_target"] = t_target
         if "w_prev" in obs_space_keys:
             obs["w_prev"] = np.array([w_prev], dtype=np.float32)
         if include_asset_id and "asset_id" in obs_space_keys:
@@ -391,8 +386,6 @@ def main(config_path: str | None = None):
             embedding_dim=jepa_cfg["d_model"],
             patch_len=jepa_cfg["patch_len"],
             patch_stride=jepa_cfg["patch_stride"],
-            use_obs_targets=True,
-            target_len=test_dataset.pred_len,
             jepa_loss_type=cfg.get("ppo", {}).get("jepa_loss_type", "mse"),
         ),
         net_arch=dict(pi=[256, 256], vf=[256, 256]),

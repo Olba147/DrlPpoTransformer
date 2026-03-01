@@ -145,14 +145,10 @@ class Learner:
 
             x_context = batch["x_context"]
             t_context = batch["t_context"]
-            x_target = batch["x_target"]
-            t_target = batch["t_target"]
             asset_id = batch.get("asset_id", None)
 
             with torch.cuda.amp.autocast(enabled=self.amp):
-                # Expect model to accept the whole dict or at least the features under known keys.
-                # If your model signature is different, adapt here.
-                pred = self.model(x_context, t_context, x_target, t_target, asset_id=asset_id)
+                pred = self.model(x_context, t_context, asset_id=asset_id)
                 self._cb("after_pred", pred, batch)
                 l1_loss = self.loss_func(pred[0], pred[1])
                 
