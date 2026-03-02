@@ -77,7 +77,9 @@ def make_patches(x: torch.Tensor, patch_len: int, stride: int) -> torch.Tensor:
     if patch_len > L:
         raise ValueError("patch_len must be <= sequence length.")
     n = 1 + (L - patch_len) // stride
-    patches = x.unfold(dimension=1, size=patch_len, step=stride)  # [B, N, P, C]
+    patches = x.unfold(dimension=1, size=patch_len, step=stride)  # [B, N, C, P]
+    # Reorder to [B, N, P, C] so flattening preserves per-timestep feature adjacency.
+    patches = patches.permute(0, 1, 3, 2)
     return patches.contiguous().view(B, n, patch_len * C)
 
 
