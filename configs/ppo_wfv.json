@@ -42,11 +42,11 @@
   "ppo": {
     "rollout_length_steps": 2048,
     "total_timesteps": 20000000,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "n_epochs": 6,
-    "batch_size": 2048,
+    "batch_size": 512,
     "gamma": 0.995,
-    "gae_lambda": 0.95,
+    "gae_lambda": 0.99,
     "clip_range": 0.2,
     "ent_coef_start": 0.05,
     "ent_coef_end": 0.01,
@@ -58,7 +58,7 @@
     "update_jepa": false,
     "jepa_loss_coef": 0.1,
     "jepa_loss_type": "smoothL1",
-    "policy_learning_rate": 0.0003,
+    "policy_learning_rate": 0.0001,
     "jepa_learning_rate": 0.00001
   },
   "evaluation": {
