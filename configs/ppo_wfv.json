@@ -26,7 +26,7 @@
     "timeframe": "15min"
   },
   "env": {
-    "episode_length_steps": 2048,
+    "episode_length_steps": 1024,
     "n_envs": 16,
     "transaction_cost_start": 0.0005,
     "transaction_cost_end": 0.0005,
@@ -35,18 +35,18 @@
     "transaction_cost_warmup": 0,
     "include_wealth": true,
     "include_asset_id": false,
-    "reward_scale": 1.0,
+    "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
   },
   "ppo": {
-    "rollout_length_steps": 2048,
+    "rollout_length_steps": 1024,
     "total_timesteps": 20000000,
     "learning_rate": 0.0001,
     "n_epochs": 4,
-    "batch_size": 2048,
-    "gamma": 0.995,
-    "gae_lambda": 0.95,
+    "batch_size": 1024,
+    "gamma": 0.99,
+    "gae_lambda": 0.98,
     "clip_range": 0.2,
     "ent_coef_start": 0.05,
     "ent_coef_end": 0.005,
