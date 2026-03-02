@@ -94,6 +94,36 @@ class PatchTSTEncoder(nn.Module):
             pos_indices = pos_indices + 1
         return self.posenc.gather(pos_indices)
 
+    def _add_positional_embeddings(
+        self,
+        tok: torch.Tensor,
+        patch_indices: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if patch_indices is None:
+            return self.posenc(tok)
+
+        if patch_indices.dim() != 2:
+            raise ValueError(
+                f"patch_indices must have shape [B, N], got {tuple(patch_indices.shape)}"
+            )
+
+        batch_size = tok.size(0)
+        patch_pos = self.get_patch_positional_embeddings(patch_indices)
+        if self.add_cls:
+            if tok.size(1) != patch_pos.size(1) + 1:
+                raise ValueError(
+                    "Token count must equal visible patch count plus CLS when patch_indices are provided."
+                )
+            cls_indices = torch.zeros((batch_size, 1), device=tok.device, dtype=torch.long)
+            cls_pos = self.posenc.gather(cls_indices)
+            return torch.cat([tok[:, :1] + cls_pos, tok[:, 1:] + patch_pos], dim=1)
+
+        if tok.size(1) != patch_pos.size(1):
+            raise ValueError(
+                "Token count must match visible patch count when patch_indices are provided."
+            )
+        return tok + patch_pos
+
     def _encode_time_patch(self, time_cont_patch: torch.Tensor) -> torch.Tensor:
         """
         time_cont_patch: [B, N, patch_len*2] with (weekday, minute_of_day) flattened per step
@@ -118,12 +148,14 @@ class PatchTSTEncoder(nn.Module):
         X_patch: torch.Tensor,
         time_cont_patch: torch.Tensor,
         asset_id: torch.Tensor | None = None,
+        patch_indices: torch.Tensor | None = None,
         return_tokens: bool = False,
     ):
         """
         X_patch        : [B, N, patch_len*6]
         time_cont_patch: [B, N, patch_len*2]
         asset_id: [B]
+        patch_indices: [B, N] original patch indices for masked/context-only inputs
         Returns:
           pooled embedding -> [B, d_model]
           token sequence   -> [B, N, d_model] when return_tokens=True
@@ -142,7 +174,7 @@ class PatchTSTEncoder(nn.Module):
             asset_vec = self.asset_emb(asset_id.long())       # [B, D]
             tok = tok + self.asset_gate * asset_vec.unsqueeze(1)
 
-        tok = self.posenc(tok)
+        tok = self._add_positional_embeddings(tok, patch_indices=patch_indices)
         z = self.encoder(tok)                                 # [B, T, D]
         z = self.final_norm(z)
 

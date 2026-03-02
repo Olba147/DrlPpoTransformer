@@ -73,6 +73,7 @@ class JEPA(nn.Module):
             X_ctx_visible,
             T_ctx_visible,
             asset_id=asset_id,
+            patch_indices=context_indices,
             return_tokens=True,
         )
 
