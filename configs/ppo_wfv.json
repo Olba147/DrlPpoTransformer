@@ -35,7 +35,7 @@
     "transaction_cost_warmup": 0,
     "include_wealth": true,
     "include_asset_id": false,
-    "reward_scale": 10.0,
+    "reward_scale": 1.0,
     "allow_short": true,
     "action_mode": "discrete_3"
   },
