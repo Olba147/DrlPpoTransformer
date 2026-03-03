@@ -34,7 +34,7 @@
     "transaction_cost_schedule_timesteps": 6000000,
     "transaction_cost_warmup": 0,
     "include_wealth": true,
-    "include_asset_id": true,
+    "include_asset_id": false,
     "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
@@ -49,7 +49,7 @@
     "gae_lambda": 0.95,
     "clip_range": 0.2,
     "ent_coef_start": 0.02,
-    "ent_coef_end": 0.01,
+    "ent_coef_end": 0.001,
     "ent_decay_steps": 4000000,
     "ent_warmup_fraction": 0.0,
     "vf_coef": 0.7,
