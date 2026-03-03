@@ -283,7 +283,7 @@ def main(config_path: str | None = None):
             jepa_loss_type=jepa_loss_type,
             attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
-        net_arch=dict(pi=[512, 512], vf=[512, 512])
+        net_arch=dict(pi=[256, 256], vf=[512, 512])
     )
 
     resume_path = resume_cfg.get("path")
