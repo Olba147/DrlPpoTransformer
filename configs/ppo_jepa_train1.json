@@ -69,8 +69,7 @@
     "num_layers": 4,
     "dim_ff": 768,
     "dropout": 0.0,
-    "add_cls": true,
-    "pooling": "cls",
+    "attn_pool_heads": 4,
     "ema_tau_min": 0.99,
     "ema_tau_max": 0.999,
     "use_asset_embeddings": false

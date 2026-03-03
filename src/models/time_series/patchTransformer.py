@@ -56,13 +56,10 @@ class PatchTSTEncoder(nn.Module):
         num_layers: int = 4,         # num of transformer blocks
         dim_ff: int = 512,           # FFN hidden dim
         dropout: float = 0.1,
-        add_cls: bool = True,
-        pooling: str = "cls",        # "cls" | "mean"
         num_assets: int | None = None,
     ):
         super().__init__()
         self.patch_len = patch_len
-        self.add_cls, self.pooling = add_cls, pooling
 
         self.n_features = n_features
         self.n_time_features = n_time_features
@@ -82,17 +79,10 @@ class PatchTSTEncoder(nn.Module):
         self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
         self.final_norm = nn.LayerNorm(d_model)
 
-        self.cls = nn.Parameter(torch.zeros(1,1,d_model)) if add_cls else None
-        if self.cls is not None:
-            nn.init.trunc_normal_(self.cls, std=0.02)
-
         self.head = nn.Identity()
 
     def get_patch_positional_embeddings(self, indices: torch.Tensor) -> torch.Tensor:
-        pos_indices = indices.long()
-        if self.add_cls:
-            pos_indices = pos_indices + 1
-        return self.posenc.gather(pos_indices)
+        return self.posenc.gather(indices.long())
 
     def _add_positional_embeddings(
         self,
@@ -100,27 +90,18 @@ class PatchTSTEncoder(nn.Module):
         patch_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if patch_indices is None:
-            return self.posenc(tok)
+            batch_size, num_tokens = tok.shape[:2]
+            patch_indices = torch.arange(num_tokens, device=tok.device).unsqueeze(0).expand(batch_size, -1)
 
         if patch_indices.dim() != 2:
             raise ValueError(
                 f"patch_indices must have shape [B, N], got {tuple(patch_indices.shape)}"
             )
 
-        batch_size = tok.size(0)
         patch_pos = self.get_patch_positional_embeddings(patch_indices)
-        if self.add_cls:
-            if tok.size(1) != patch_pos.size(1) + 1:
-                raise ValueError(
-                    "Token count must equal visible patch count plus CLS when patch_indices are provided."
-                )
-            cls_indices = torch.zeros((batch_size, 1), device=tok.device, dtype=torch.long)
-            cls_pos = self.posenc.gather(cls_indices)
-            return torch.cat([tok[:, :1] + cls_pos, tok[:, 1:] + patch_pos], dim=1)
-
         if tok.size(1) != patch_pos.size(1):
             raise ValueError(
-                "Token count must match visible patch count when patch_indices are provided."
+                "Token count must match patch_indices length when patch_indices are provided."
             )
         return tok + patch_pos
 
@@ -164,10 +145,6 @@ class PatchTSTEncoder(nn.Module):
         Tp_flat = self._encode_time_patch(time_cont_patch)   # [B, N, P*4]
         tok = self.proj_price(X_patch) + self.time_gate * self.proj_time(Tp_flat)  # [B, N, D]
 
-        if self.cls is not None:
-            cls = self.cls.expand(tok.size(0), -1, -1)       # [B,1,D]
-            tok = torch.cat([cls, tok], dim=1)               # [B, 1+N, D]
-
         if self.asset_emb is not None and asset_id is not None:
             if asset_id.dim() > 1:
                 asset_id = asset_id.view(-1)
@@ -178,12 +155,6 @@ class PatchTSTEncoder(nn.Module):
         z = self.encoder(tok)                                 # [B, T, D]
         z = self.final_norm(z)
 
-        # Readout
         if return_tokens:
-            return z[:, 1:] if self.add_cls else z
-        if self.add_cls and self.pooling == "cls":
-            return z[:, 0]                                # [B, D]
-        elif self.pooling == "mean":
-            return z.mean(dim=1)                          # [B, D]
-        else:
-            return z[:, 1:].mean(dim=1) if self.add_cls else z.mean(dim=1)
+            return z
+        return z.mean(dim=1)

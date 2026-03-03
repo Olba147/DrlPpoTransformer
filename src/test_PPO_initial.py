@@ -103,8 +103,6 @@ def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_pa
         num_layers=jepa_cfg["num_layers"],
         dim_ff=jepa_cfg["dim_ff"],
         dropout=jepa_cfg["dropout"],
-        add_cls=jepa_cfg.get("add_cls", True),
-        pooling=jepa_cfg["pooling"],
         num_assets=num_assets if jepa_cfg.get("use_asset_embeddings", False) else None,
     )
 
@@ -117,8 +115,6 @@ def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_pa
         num_layers=jepa_cfg["num_layers"],
         dim_ff=jepa_cfg["dim_ff"],
         dropout=jepa_cfg["dropout"],
-        add_cls=jepa_cfg.get("add_cls", True),
-        pooling=jepa_cfg["pooling"],
         num_assets=num_assets if jepa_cfg.get("use_asset_embeddings", False) else None,
     )
 
@@ -387,8 +383,9 @@ def main(config_path: str | None = None):
             patch_len=jepa_cfg["patch_len"],
             patch_stride=jepa_cfg["patch_stride"],
             jepa_loss_type=cfg.get("ppo", {}).get("jepa_loss_type", "mse"),
+            attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
-        net_arch=dict(pi=[256, 256], vf=[256, 256]),
+        net_arch=dict(pi=[512, 512], vf=[512, 512]),
     )
 
     print(f"Loading PPO model from {ppo_checkpoint_path}...")

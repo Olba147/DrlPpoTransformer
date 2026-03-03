@@ -18,6 +18,26 @@ from Training.callbacks import make_patches
 from models.jepa.jepa import JEPA
 
 
+class AttentionPooling(nn.Module):
+    def __init__(self, d_model: int, num_heads: int = 4, dropout: float = 0.0) -> None:
+        super().__init__()
+        self.query = nn.Parameter(th.empty(1, 1, d_model))
+        nn.init.trunc_normal_(self.query, std=0.02)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(self, tokens: th.Tensor) -> th.Tensor:
+        batch_size = tokens.size(0)
+        query = self.query.expand(batch_size, -1, -1)
+        pooled, _ = self.attn(query=query, key=tokens, value=tokens, need_weights=False)
+        return self.norm(pooled.squeeze(1))
+
+
 class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
@@ -27,6 +47,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         patch_len: int,
         patch_stride: int,
         jepa_loss_type: str = "mse",
+        attn_pool_heads: int = 4,
     ) -> None:
         w_prev_dim = observation_space["w_prev"].shape[0] if "w_prev" in observation_space.spaces else 0
         wealth_dim = observation_space["wealth_feats"].shape[0] if "wealth_feats" in observation_space.spaces else 0
@@ -46,6 +67,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         self.patch_stride = patch_stride
         self.asset_dim = asset_dim
         self.jepa_loss_type = jepa_loss_type.lower()
+        self.attn_pool = AttentionPooling(embedding_dim, num_heads=attn_pool_heads)
 
 
         self.last_jepa_loss: Optional[th.Tensor] = None
@@ -115,9 +137,13 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         x_full_p = self._patch(x_full)
         t_full_p = self._patch(t_full)
 
-        z_t = self.jepa_model.context_enc(x_full_p, t_full_p, asset_id=asset_id)
-        if z_t.dim() == 1:
-            z_t = z_t.unsqueeze(0)
+        tokens = self.jepa_model.context_enc(
+            x_full_p,
+            t_full_p,
+            asset_id=asset_id,
+            return_tokens=True,
+        )
+        z_t = self.attn_pool(tokens)
 
         w_prev = observations.get("w_prev", None)
         wealth_feats = observations.get("wealth_feats", None)

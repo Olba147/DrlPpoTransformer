@@ -227,8 +227,6 @@ def main(config_path: str | None = None):
         num_layers=jepa_cfg["num_layers"],
         dim_ff=jepa_cfg["dim_ff"],
         dropout=jepa_cfg["dropout"],
-        add_cls=jepa_cfg.get("add_cls", True),
-        pooling=jepa_cfg["pooling"],
         num_assets=encoder_num_assets,
     )
 
@@ -283,6 +281,7 @@ def main(config_path: str | None = None):
             patch_len=jepa_cfg["patch_len"],
             patch_stride=jepa_cfg["patch_stride"],
             jepa_loss_type=jepa_loss_type,
+            attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
         net_arch=dict(pi=[512, 512], vf=[512, 512])
     )

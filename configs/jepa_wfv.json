@@ -44,8 +44,6 @@
     "num_layers": 4,
     "dim_ff": 768,
     "dropout": 0.0,
-    "add_cls": true,
-    "pooling": "cls",
     "mask_ratio": 0.7,
     "predictor_num_layers": 2,
     "ema_tau_min": 0.99,

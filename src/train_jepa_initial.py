@@ -111,8 +111,6 @@ def main(config_path: str):
         num_layers=model_cfg["num_layers"],
         dim_ff=model_cfg["dim_ff"],
         dropout=model_cfg["dropout"],
-        add_cls=model_cfg.get("add_cls", True),
-        pooling=model_cfg["pooling"],
         num_assets=encoder_num_assets,
     )
 
