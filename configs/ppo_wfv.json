@@ -62,7 +62,7 @@
     "jepa_learning_rate": 0.00001
   },
   "evaluation": {
-    "episodes": 16,
+    "episodes": 32,
     "episode_len": 1024,
     "every_steps": 5000,
     "checkpoint_every_steps": 20000,
