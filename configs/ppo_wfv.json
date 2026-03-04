@@ -63,7 +63,7 @@
   },
   "evaluation": {
     "episodes": 1,
-    "episode_len": 4000,
+    "episode_len": 1024,
     "every_steps": 5000,
     "checkpoint_every_steps": 20000,
     "moving_average_window": 20
