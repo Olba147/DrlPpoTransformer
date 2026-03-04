@@ -70,8 +70,6 @@ def make_env(
     include_asset_id: bool,
     allow_short: bool,
     action_mode: str,
-    fixed_asset_id: str | None = None,
-    full_episode: bool = False,
 ):
     return lambda: GymTradingEnv(
         dataset,
@@ -82,8 +80,6 @@ def make_env(
         action_mode=action_mode,
         include_wealth=include_wealth,
         include_asset_id=include_asset_id,
-        fixed_asset_id=fixed_asset_id,
-        full_episode=full_episode,
     )
 
 
@@ -176,6 +172,8 @@ def main(config_path: str | None = None):
         f"warmup={transaction_cost_warmup}"
     )
     eval_episode_len = int(eval_cfg.get("episode_len", env_cfg["episode_length_steps"]))
+    eval_n_envs = int(env_cfg["n_envs"])
+    eval_n_episodes = int(eval_cfg.get("episodes", eval_n_envs))
     print(f"Action mode: {action_mode}, include_asset_id: {include_asset_id}")
     train_env = SubprocVecEnv(
         [
@@ -188,7 +186,6 @@ def main(config_path: str | None = None):
                 include_asset_id,
                 env_cfg.get("allow_short", True),
                 action_mode,
-                full_episode=False,
             )
             for _ in range(env_cfg["n_envs"])
         ]
@@ -204,14 +201,16 @@ def main(config_path: str | None = None):
                 include_asset_id,
                 env_cfg.get("allow_short", True),
                 action_mode,
-                fixed_asset_id=asset_id,
-                full_episode=True,
             )
-            for asset_id in val_dataset.asset_ids
+            for _ in range(eval_n_envs)
         ]
     )
-    eval_n_episodes = len(val_dataset.asset_ids)
-    print(f"Evaluation setup: {eval_n_episodes} envs, one fixed asset per env, one episode per asset.")
+    print(
+        "Evaluation setup: "
+        f"{eval_n_envs} envs, "
+        f"episode_len={eval_episode_len}, "
+        f"n_eval_episodes={eval_n_episodes}."
+    )
     # number of assets, and whether to use asset embeddings
     use_asset_embeddings = jepa_cfg.get("use_asset_embeddings", True) and include_asset_id
     encoder_num_assets = num_assets if use_asset_embeddings else None
