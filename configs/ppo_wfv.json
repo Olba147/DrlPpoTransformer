@@ -49,7 +49,7 @@
     "gae_lambda": 0.95,
     "clip_range": 0.2,
     "ent_coef_start": 0.04,
-    "ent_coef_end": 0.001,
+    "ent_coef_end": 0.01,
     "ent_decay_steps": 8000000,
     "ent_warmup_fraction": 0.0,
     "vf_coef": 0.7,
