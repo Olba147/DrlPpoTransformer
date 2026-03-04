@@ -390,8 +390,9 @@ class RewardEvalCallback(EvalCallback):
         self.append_existing_log = bool(append_existing_log)
         self.moving_average_window = moving_average_window
         self.best_model_save_path_ma = best_model_save_path
-        self.best_moving_average_reward = -np.inf
+        self.best_moving_average_excess_return = -np.inf
         self._eval_reward_history: list[float] = []
+        self._eval_excess_return_history: list[float] = []
         self._eval_trade_counts_by_env: dict[int, int] = {}
         self._eval_bh_logret_by_env: dict[int, float] = {}
         self._last_eval_episode_excess_returns: list[float] = []
@@ -462,31 +463,33 @@ class RewardEvalCallback(EvalCallback):
                 self._eval_reward_history.append(mean_eval_reward)
                 self.logger.record("custom/eval_episode_reward_mean", mean_eval_reward)
 
-                if len(self._eval_reward_history) >= self.moving_average_window:
-                    window_vals = self._eval_reward_history[-self.moving_average_window :]
-                    moving_avg = float(np.mean(window_vals))
-                    self.logger.record("custom/eval_reward_ma", moving_avg)
-                    self.logger.record("custom/eval_reward_ma_window", int(self.moving_average_window))
+            if self._last_eval_episode_excess_returns:
+                mean_excess_return = float(np.mean(self._last_eval_episode_excess_returns))
+                self.logger.record(
+                    "custom/eval_excess_return_mean",
+                    mean_excess_return,
+                )
+                self._eval_excess_return_history.append(mean_excess_return)
+                if len(self._eval_excess_return_history) >= self.moving_average_window:
+                    window_vals = self._eval_excess_return_history[-self.moving_average_window :]
+                    moving_avg_excess = float(np.mean(window_vals))
+                    self.logger.record("custom/eval_excess_return_ma", moving_avg_excess)
+                    self.logger.record("custom/eval_excess_return_ma_window", int(self.moving_average_window))
                     if (
                         self.best_model_save_path_ma
-                        and moving_avg > self.best_moving_average_reward
+                        and moving_avg_excess > self.best_moving_average_excess_return
                     ):
-                        self.best_moving_average_reward = moving_avg
+                        self.best_moving_average_excess_return = moving_avg_excess
                         os.makedirs(self.best_model_save_path_ma, exist_ok=True)
                         best_path = os.path.join(self.best_model_save_path_ma, "best_model")
                         self.model.save(best_path)
-                        self.logger.record("custom/eval_reward_ma_best", moving_avg)
+                        self.logger.record("custom/eval_excess_return_ma_best", moving_avg_excess)
                         if self.verbose >= 1:
                             print(
                                 "[RewardEvalCallback] Saved new best model "
-                                f"(MA{self.moving_average_window}={moving_avg:.6f}) to "
+                                f"(excess MA{self.moving_average_window}={moving_avg_excess:.6f}) to "
                                 f"{best_path}.zip"
                             )
-            if self._last_eval_episode_excess_returns:
-                self.logger.record(
-                    "custom/eval_excess_return_mean",
-                    float(np.mean(self._last_eval_episode_excess_returns)),
-                )
             if self._last_eval_episode_trades:
                 self.logger.record(
                     "custom/eval_episode_trades_mean",
