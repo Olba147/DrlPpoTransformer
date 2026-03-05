@@ -49,7 +49,7 @@
       "eps": 1e-5
     },
     "n_epochs": 6,
-    "batch_size": 1024,
+    "batch_size": 2024,
     "gamma": 0.99,
     "gae_lambda": 0.98,
     "clip_range": 0.2,
@@ -69,7 +69,7 @@
   "evaluation": {
     "episodes": 32,
     "episode_len": 1024,
-    "every_steps": 10000,
+    "every_steps": 5000,
     "checkpoint_every_steps": 20000,
     "moving_average_window": 20
   },
