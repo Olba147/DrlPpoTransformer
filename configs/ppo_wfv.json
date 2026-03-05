@@ -35,12 +35,12 @@
     "transaction_cost_warmup": 0,
     "include_wealth": false,
     "include_asset_id": false,
-    "reward_scale": 1.0,
+    "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
   },
   "ppo": {
-    "rollout_length_steps": 1024,
+    "rollout_length_steps": 512,
     "total_timesteps": 30000000,
     "learning_rate": 0.0001,
     "optimizer": "adamw",
@@ -48,7 +48,7 @@
       "weight_decay": 1e-5,
       "eps": 1e-5
     },
-    "n_epochs": 3,
+    "n_epochs": 5,
     "batch_size": 4096,
     "gamma": 0.995,
     "gae_lambda": 0.98,
