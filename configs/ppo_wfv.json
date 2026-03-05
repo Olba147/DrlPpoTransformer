@@ -27,7 +27,7 @@
   },
   "env": {
     "episode_length_steps": 2048,
-    "n_envs": 16,
+    "n_envs": 32,
     "transaction_cost_start": 0.0005,
     "transaction_cost_end": 0.0005,
     "transaction_cost_steps": 0,
@@ -40,7 +40,7 @@
     "action_mode": "discrete_3"
   },
   "ppo": {
-    "rollout_length_steps": 2048,
+    "rollout_length_steps": 1024,
     "total_timesteps": 30000000,
     "learning_rate": 0.0001,
     "optimizer": "adamw",
