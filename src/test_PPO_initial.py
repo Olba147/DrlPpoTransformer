@@ -385,7 +385,7 @@ def main(config_path: str | None = None):
             jepa_loss_type=cfg.get("ppo", {}).get("jepa_loss_type", "mse"),
             attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
-        net_arch=dict(pi=[512, 512], vf=[512, 512]),
+        net_arch=dict(pi=[256, 256], vf=[256, 256]),
     )
 
     print(f"Loading PPO model from {ppo_checkpoint_path}...")
