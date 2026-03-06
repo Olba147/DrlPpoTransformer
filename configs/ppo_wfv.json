@@ -55,7 +55,7 @@
     "clip_range": 0.2,
     "ent_coef_start": 0.04,
     "ent_coef_end": 0.01,
-    "ent_decay_steps": 5000000,
+    "ent_decay_steps": 4000000,
     "ent_warmup_fraction": 0.0,
     "vf_coef": 0.5,
     "max_grad_norm": 0.5,
