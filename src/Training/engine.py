@@ -29,9 +29,6 @@ class Learner:
         start_epoch: int = 0,
         warmup_epochs: int = 20,
         global_step: int = 0,
-        var_loss: bool = False,
-        var_loss_gamma: float = 1.0,
-        var_loss_weight: float = 1.0
     ):
     
         self.model = model
@@ -48,11 +45,6 @@ class Learner:
         self.global_step = global_step
         self.warmup_steps = len(self.train_dl) * warmup_epochs  # 20 epochs worth of steps
         self.ema_arr = torch.linspace(self.model.ema_tau_min, self.model.ema_tau_max, self.warmup_steps)
-
-        # variance loss
-        self.var_loss = var_loss
-        self.var_loss_gamma = var_loss_gamma
-        self.var_loss_weight = var_loss_weight
 
         # propertios
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -78,9 +70,9 @@ class Learner:
         self.epoch_std_tgt = float("nan")
         self.last_ema_decay: Optional[float] = None
         self.last_l1_loss: Optional[float] = None
-        self.last_var_loss: Optional[float] = None
         self.epoch_l1_loss: float = float("nan")
-        self.epoch_var_loss: float = float("nan")
+        self.last_loss_components: dict[str, float] = {}
+        self.epoch_loss_components: dict[str, float] = {}
 
 
     # ---- helpers to call callbacks ----
@@ -94,19 +86,6 @@ class Learner:
         else:
             return self.model.ema_tau_max
     
-    @staticmethod
-    def variance_penalty(z: torch.Tensor, gamma: float = 1.0, eps: float = 1e-4) -> torch.Tensor:
-        """
-        VICReg-style variance hinge penalty.
-        Penalizes dimensions whose batch std < gamma.
-
-        z: [B, D]
-        """
-        if z.dim() != 2:
-            z = z.view(z.size(0), -1)
-        std = torch.sqrt(z.var(dim=0, unbiased=False) + eps)  # [D]
-        return F.relu(gamma - std).mean()
-
     # ---- main API ----
     def fit(self, n_epochs: int):
         self.n_epochs = n_epochs
@@ -130,7 +109,7 @@ class Learner:
 
         total_loss = 0.0
         l1_sum = 0.0
-        var_sum = 0.0
+        component_sums: dict[str, float] = {}
         n_steps = 0
         cos_sum = 0.0
         std_ctx_sum = 0.0
@@ -151,17 +130,14 @@ class Learner:
                 pred = self.model(x_context, t_context, asset_id=asset_id)
                 self._cb("after_pred", pred, batch)
                 l1_loss = self.loss_func(pred[0], pred[1])
-                
-                if self.var_loss:
-                    var_loss = self.variance_penalty(pred[0], gamma=self.var_loss_gamma)
-                    var_loss = self.var_loss_weight * var_loss
-                    self.last_var_loss = float(var_loss.detach().item())
-                else:
-                    var_loss = torch.tensor(0.0, device=pred[0].device)
-
-                loss = l1_loss + var_loss
+                loss = l1_loss
 
                 self.last_l1_loss = float(l1_loss.detach().item())
+                raw_components = getattr(self.loss_func, "last_components", None)
+                if isinstance(raw_components, dict):
+                    self.last_loss_components = dict(raw_components)
+                else:
+                    self.last_loss_components = {"loss_total": self.last_l1_loss}
                 self._cb("after_loss", loss, batch)
 
             if train:
@@ -197,7 +173,8 @@ class Learner:
 
             total_loss += loss.detach().item()
             l1_sum += l1_loss.detach().item()
-            var_sum += var_loss.detach().item()
+            for name, value in self.last_loss_components.items():
+                component_sums[name] = component_sums.get(name, 0.0) + float(value)
             n_steps += 1
             self._cb("after_batch", batch)
 
@@ -209,7 +186,9 @@ class Learner:
             self.epoch_std_ctx = std_ctx_sum / denom
             self.epoch_std_tgt = std_tgt_sum / denom
             self.epoch_l1_loss = l1_sum / denom
-            self.epoch_var_loss = var_sum / denom
+            self.epoch_loss_components = {
+                name: value / denom for name, value in component_sums.items()
+            }
         else:
             self.epoch_val_loss = avg_loss
 

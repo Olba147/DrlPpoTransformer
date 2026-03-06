@@ -162,17 +162,35 @@ class StatsPrinter(Callback):
             ema_decay = self.learn.last_ema_decay
             ema_str = f" ema_decay={ema_decay:.6f}" if ema_decay is not None else ""
             l1 = self.learn.last_l1_loss
-            var = self.learn.last_var_loss
             l1_str = f" l1={l1:.5f}" if l1 is not None else ""
-            var_str = f" var={var:.5f}" if var is not None else ""
-            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f}{l1_str}{var_str} lr={lr:.2e}{ema_str} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
+            comp = getattr(self.learn, "last_loss_components", {}) or {}
+            comp_keys = [
+                "loss_near",
+                "loss_med",
+                "loss_far_pooled",
+                "loss_total",
+            ]
+            comp_str = "".join(
+                f" {k}={comp[k]:.5f}" for k in comp_keys if k in comp
+            )
+            print(f"[train] time={time.time()-self.start_time:.2f} step={self.step} loss={loss.item():.5f}{l1_str}{comp_str} lr={lr:.2e}{ema_str} cosine sim.={self.learn.cosine_similarity:.3f} std context={self.learn.std_ctx:.3f} std target={self.learn.std_tgt:.3f}")
 
     def after_epoch(self):
+        epoch_comp = getattr(self.learn, "epoch_loss_components", {}) or {}
+        epoch_comp_keys = [
+            "loss_near",
+            "loss_med",
+            "loss_far_pooled",
+            "loss_total",
+        ]
+        comp_str = " ".join(
+            f"{k}={epoch_comp[k]:.5f}" for k in epoch_comp_keys if k in epoch_comp
+        )
         print(f"Epoch {self.learn.epoch+1}/{self.learn.n_epochs} "
               f"train_loss={self.learn.epoch_train_loss:.5f} "
               f"train_l1={self.learn.epoch_l1_loss:.5f} "
-              f"train_var_loss={self.learn.epoch_var_loss:.5f} "
               f"val_loss={self.learn.epoch_val_loss:.5f}"
+              f"{(' ' + comp_str) if comp_str else ''}"
               )
 
 
@@ -196,6 +214,9 @@ class CSVLogger(Callback):
             "train_std_ctx": self.learn.epoch_std_ctx,
             "train_std_tgt": self.learn.epoch_std_tgt,
         }
+        epoch_comp = getattr(self.learn, "epoch_loss_components", {}) or {}
+        for key, value in epoch_comp.items():
+            row[f"train_{key}"] = value
         write_header = not os.path.exists(self.path) or (not self._wrote_header)
         with open(self.path, "a", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(row.keys()))

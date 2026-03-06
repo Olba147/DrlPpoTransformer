@@ -56,10 +56,7 @@
     "use_asset_embeddings": false
   },
   "loss": {
-    "loss_type": "smoothL1",
-    "var_loss": false,
-    "var_loss_gamma": 1.0,
-    "var_loss_weight": 0.0
+    "loss_type": "smoothL1"
   },
   "resume": {
     "path": "checkpoints\\wfv\\wfv_smoke\\wfv_smoke_jepa_w001\\best.pt"

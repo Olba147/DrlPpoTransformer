@@ -95,6 +95,7 @@ class MultiHorizonWeightedLoss(nn.Module):
         self.near_weight = float(near_weight)
         self.med_weight = float(med_weight)
         self.far_weight = float(far_weight)
+        self.last_components: dict[str, float] = {}
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         near_slice = self.horizon_slices["near"]
@@ -107,11 +108,21 @@ class MultiHorizonWeightedLoss(nn.Module):
         tgt_far_pooled = target[:, far_slice, :].mean(dim=1)
         loss_far = self.base_loss(pred_far_pooled, tgt_far_pooled)
 
-        return (
+        total = (
             self.near_weight * loss_near
             + self.med_weight * loss_med
             + self.far_weight * loss_far
         )
+        self.last_components = {
+            "loss_near": float(loss_near.detach().item()),
+            "loss_med": float(loss_med.detach().item()),
+            "loss_far_pooled": float(loss_far.detach().item()),
+            "loss_near_weighted": float((self.near_weight * loss_near).detach().item()),
+            "loss_med_weighted": float((self.med_weight * loss_med).detach().item()),
+            "loss_far_weighted": float((self.far_weight * loss_far).detach().item()),
+            "loss_total": float(total.detach().item()),
+        }
+        return total
 
 
 class JEPAPretrainModel(nn.Module):
@@ -325,9 +336,6 @@ def main(config_path: str):
         grad_clip=train_cfg.get("grad_clip", 1.0),
         start_epoch=epoch,
         global_step=global_step,
-        var_loss=loss_cfg.get("var_loss", False),
-        var_loss_gamma=loss_cfg.get("var_loss_gamma", 1.0),
-        var_loss_weight=loss_cfg.get("var_loss_weight", 0.0),
         warmup_epochs=train_cfg["warmup_epochs"],
     )
 
