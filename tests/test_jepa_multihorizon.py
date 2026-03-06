@@ -33,9 +33,9 @@ def test_multihorizon_forward_shapes_and_block_lengths():
     horizon_blocks = {
         "near": [1, 1],
         "med": [2, 5],
-        "far": [6, 18],
+        "far": [6, 17],
     }
-    horizon_tokens = 18
+    horizon_tokens = 17
 
     context_enc = _build_encoder()
     target_enc = _build_encoder()
@@ -64,7 +64,7 @@ def test_multihorizon_forward_shapes_and_block_lengths():
     assert target.shape == (batch_size, horizon_tokens, 8)
     assert pred[:, model.horizon_slices["near"], :].shape[1] == 1
     assert pred[:, model.horizon_slices["med"], :].shape[1] == 4
-    assert pred[:, model.horizon_slices["far"], :].shape[1] == 13
+    assert pred[:, model.horizon_slices["far"], :].shape[1] == 12
 
 
 def test_multihorizon_uses_absolute_future_patch_indices():
@@ -104,4 +104,3 @@ def test_multihorizon_uses_absolute_future_patch_indices():
 
     assert torch.equal(context_enc.last_patch_indices, expected_context)
     assert torch.equal(target_enc.last_patch_indices, expected_future)
-

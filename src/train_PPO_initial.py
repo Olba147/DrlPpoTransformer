@@ -241,7 +241,7 @@ def main(config_path: str | None = None):
         {
             "near": [1, 1],
             "med": [2, 5],
-            "far": [6, 18],
+            "far": [6, 17],
         },
     )
 

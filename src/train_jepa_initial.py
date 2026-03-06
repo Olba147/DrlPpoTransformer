@@ -67,8 +67,15 @@ def _parse_horizon_blocks(horizon_blocks: dict[str, list[int]]) -> tuple[dict[st
     return slices, prev_end
 
 
-class MultiHorizonEqualLoss(nn.Module):
-    def __init__(self, base_loss_type: str, horizon_slices: dict[str, slice]):
+class MultiHorizonWeightedLoss(nn.Module):
+    def __init__(
+        self,
+        base_loss_type: str,
+        horizon_slices: dict[str, slice],
+        near_weight: float = 1.0,
+        med_weight: float = 1.0,
+        far_weight: float = 0.5,
+    ):
         super().__init__()
         loss_type = str(base_loss_type).lower()
         if loss_type == "mse":
@@ -78,12 +85,33 @@ class MultiHorizonEqualLoss(nn.Module):
         else:
             raise ValueError(f"Unknown loss type: {base_loss_type}")
         self.horizon_slices = dict(horizon_slices)
+        required = {"near", "med", "far"}
+        missing = required.difference(self.horizon_slices.keys())
+        if missing:
+            raise ValueError(
+                "MultiHorizonWeightedLoss requires near/med/far horizon blocks. "
+                f"Missing: {sorted(missing)}"
+            )
+        self.near_weight = float(near_weight)
+        self.med_weight = float(med_weight)
+        self.far_weight = float(far_weight)
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        losses = []
-        for horizon_slice in self.horizon_slices.values():
-            losses.append(self.base_loss(pred[:, horizon_slice, :], target[:, horizon_slice, :]))
-        return torch.stack(losses).mean()
+        near_slice = self.horizon_slices["near"]
+        med_slice = self.horizon_slices["med"]
+        far_slice = self.horizon_slices["far"]
+
+        loss_near = self.base_loss(pred[:, near_slice, :], target[:, near_slice, :])
+        loss_med = self.base_loss(pred[:, med_slice, :], target[:, med_slice, :])
+        pred_far_pooled = pred[:, far_slice, :].mean(dim=1)
+        tgt_far_pooled = target[:, far_slice, :].mean(dim=1)
+        loss_far = self.base_loss(pred_far_pooled, tgt_far_pooled)
+
+        return (
+            self.near_weight * loss_near
+            + self.med_weight * loss_med
+            + self.far_weight * loss_far
+        )
 
 
 class JEPAPretrainModel(nn.Module):
@@ -135,7 +163,7 @@ def main(config_path: str):
         {
             "near": [1, 1],
             "med": [2, 5],
-            "far": [6, 18],
+            "far": [6, 17],
         },
     )
     horizon_slices, horizon_tokens = _parse_horizon_blocks(horizon_blocks)
@@ -235,7 +263,13 @@ def main(config_path: str):
         epoch = 0
         global_step = 0
 
-    loss_fn = MultiHorizonEqualLoss(loss_cfg["loss_type"], horizon_slices)
+    loss_fn = MultiHorizonWeightedLoss(
+        loss_cfg["loss_type"],
+        horizon_slices,
+        near_weight=1.0,
+        med_weight=1.0,
+        far_weight=0.5,
+    )
 
     opt = torch.optim.Adam(
         list(jepa_model.context_enc.parameters())

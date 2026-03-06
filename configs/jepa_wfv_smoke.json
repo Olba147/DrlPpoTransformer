@@ -42,7 +42,7 @@
     "horizon_blocks": {
       "near": [1, 1],
       "med": [2, 5],
-      "far": [6, 18]
+      "far": [6, 17]
     },
     "d_model": 192,
     "n_features": 9,

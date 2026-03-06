@@ -31,7 +31,7 @@ class JEPA(nn.Module):
             horizon_blocks = {
                 "near": [1, 1],
                 "med": [2, 5],
-                "far": [6, 18],
+                "far": [6, 17],
             }
         self.horizon_slices, self.horizon_tokens = self._build_horizon_slices(horizon_blocks)
         self.target_queries = nn.Parameter(torch.empty(1, self.horizon_tokens, d_model))
