@@ -271,12 +271,13 @@ def main(config_path: str):
         far_weight=0.5,
     )
 
-    opt = torch.optim.Adam(
+    opt = torch.optim.AdamW(
         list(jepa_model.context_enc.parameters())
         + list(jepa_model.predictor.parameters())
         + list(jepa_model.predictor_norm.parameters())
         + [jepa_model.target_queries],
         lr=train_cfg["learning_rate"],
+        weight_decay=train_cfg.get("weight_decay", 0.0),
     )
 
     log_root = paths_cfg.get("log_root", "logs")
