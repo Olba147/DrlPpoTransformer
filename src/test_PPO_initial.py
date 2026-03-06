@@ -93,7 +93,35 @@ def action_to_weight(action, action_mode: str, allow_short: bool) -> float:
     return w_t
 
 
-def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_path: str) -> JEPA:
+def build_jepa_model(
+    device: str,
+    num_assets: int,
+    jepa_cfg: dict,
+    checkpoint_path: str,
+    context_len_steps: int,
+) -> JEPA:
+    patch_len = int(jepa_cfg["patch_len"])
+    patch_stride = int(jepa_cfg["patch_stride"])
+    context_len_steps = int(jepa_cfg.get("context_len_steps", context_len_steps))
+    if context_len_steps < patch_len:
+        raise ValueError(
+            f"jepa_model.context_len_steps must be >= patch_len ({patch_len}), got {context_len_steps}."
+        )
+    if (context_len_steps - patch_len) % patch_stride != 0:
+        raise ValueError(
+            f"(context_len_steps - patch_len) must be divisible by patch_stride. "
+            f"Got context_len_steps={context_len_steps}, patch_len={patch_len}, patch_stride={patch_stride}."
+        )
+    context_tokens = 1 + (context_len_steps - patch_len) // patch_stride
+    horizon_blocks = jepa_cfg.get(
+        "horizon_blocks",
+        {
+            "near": [1, 1],
+            "med": [2, 5],
+            "far": [6, 18],
+        },
+    )
+
     jepa_context_encoder = PatchTSTEncoder(
         patch_len=jepa_cfg["patch_len"],
         d_model=jepa_cfg["d_model"],
@@ -128,7 +156,8 @@ def build_jepa_model(device: str, num_assets: int, jepa_cfg: dict, checkpoint_pa
         dim_ff=jepa_cfg["dim_ff"],
         dropout=jepa_cfg["dropout"],
         predictor_num_layers=jepa_cfg.get("predictor_num_layers", 2),
-        mask_ratio=jepa_cfg.get("mask_ratio", 0.5),
+        context_tokens=context_tokens,
+        horizon_blocks=horizon_blocks,
     )
 
     if os.path.exists(checkpoint_path):
@@ -373,7 +402,13 @@ def main(config_path: str | None = None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Loading JEPA model...")
     num_asset_ids = int(getattr(test_dataset, "num_asset_ids", len(test_dataset.asset_ids)))
-    jepa_model = build_jepa_model(device, num_assets=num_asset_ids, jepa_cfg=jepa_cfg, checkpoint_path=jepa_checkpoint_path)
+    jepa_model = build_jepa_model(
+        device,
+        num_assets=num_asset_ids,
+        jepa_cfg=jepa_cfg,
+        checkpoint_path=jepa_checkpoint_path,
+        context_len_steps=cfg["dataset"]["context_len"],
+    )
 
     policy_kwargs = dict(
         features_extractor_class=JEPAAuxFeatureExtractor,
@@ -382,7 +417,6 @@ def main(config_path: str | None = None):
             embedding_dim=jepa_cfg["d_model"],
             patch_len=jepa_cfg["patch_len"],
             patch_stride=jepa_cfg["patch_stride"],
-            jepa_loss_type=cfg.get("ppo", {}).get("jepa_loss_type", "mse"),
             attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
         net_arch=dict(pi=[256, 256], vf=[256, 256]),

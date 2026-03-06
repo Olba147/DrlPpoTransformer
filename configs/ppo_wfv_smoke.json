@@ -56,10 +56,7 @@
     "max_grad_norm": 0.5,
     "target_kl": 0.05,
     "update_jepa": false,
-    "jepa_loss_coef": 0.1,
-    "jepa_loss_type": "smoothL1",
-    "policy_learning_rate": 0.0001,
-    "jepa_learning_rate": 0.00001
+    "policy_learning_rate": 0.0001
   },
   "evaluation": {
     "episodes": 1,
@@ -71,6 +68,12 @@
   "jepa_model": {
     "patch_len": 8,
     "patch_stride": 8,
+    "context_len_steps": 128,
+    "horizon_blocks": {
+      "near": [1, 1],
+      "med": [2, 5],
+      "far": [6, 18]
+    },
     "d_model": 192,
     "n_features": 9,
     "n_time_features": 2,
@@ -79,7 +82,6 @@
     "dim_ff": 768,
     "dropout": 0.0,
     "attn_pool_heads": 4,
-    "mask_ratio": 0.5,
     "predictor_num_layers": 2,
     "ema_tau_min": 0.99,
     "ema_tau_max": 0.999,

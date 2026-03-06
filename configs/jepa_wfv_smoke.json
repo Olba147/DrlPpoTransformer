@@ -38,6 +38,12 @@
   "jepa_model": {
     "patch_len": 8,
     "patch_stride": 8,
+    "context_len_steps": 128,
+    "horizon_blocks": {
+      "near": [1, 1],
+      "med": [2, 5],
+      "far": [6, 18]
+    },
     "d_model": 192,
     "n_features": 9,
     "n_time_features": 2,
@@ -45,7 +51,6 @@
     "num_layers": 4,
     "dim_ff": 768,
     "dropout": 0.0,
-    "mask_ratio": 0.5,
     "predictor_num_layers": 2,
     "ema_tau_min": 0.99,
     "ema_tau_max": 0.999,

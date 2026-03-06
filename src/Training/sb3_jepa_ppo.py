@@ -46,7 +46,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         embedding_dim: int,
         patch_len: int,
         patch_stride: int,
-        jepa_loss_type: str = "mse",
         attn_pool_heads: int = 4,
     ) -> None:
         w_prev_dim = observation_space["w_prev"].shape[0] if "w_prev" in observation_space.spaces else 0
@@ -66,13 +65,7 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         self.patch_len = patch_len
         self.patch_stride = patch_stride
         self.asset_dim = asset_dim
-        self.jepa_loss_type = jepa_loss_type.lower()
         self.attn_pool = AttentionPooling(embedding_dim, num_heads=attn_pool_heads)
-
-
-        self.last_jepa_loss: Optional[th.Tensor] = None
-        self.last_pred_std: Optional[float] = None
-        self.last_tgt_std: Optional[float] = None
 
     def _ensure_batched(self, x: th.Tensor) -> th.Tensor:
         if x.dim() == 2:
@@ -94,37 +87,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
 
     def _patch(self, x: th.Tensor) -> th.Tensor:
         return make_patches(x, self.patch_len, self.patch_stride)
-
-    def compute_jepa_aux(
-        self,
-        observations: Dict[str, th.Tensor],
-    ) -> tuple[Optional[th.Tensor], Optional[float], Optional[float]]:
-        x_context = self._ensure_batched(observations["x_context"])
-        t_context = self._ensure_batched(observations["t_context"])
-        asset_id = self._get_asset_id(observations)
-
-        if x_context.shape[1] < self.patch_len:
-            self.last_jepa_loss = None
-            self.last_pred_std = None
-            self.last_tgt_std = None
-            return None, None, None
-
-        x_ctx_p = self._patch(x_context)
-        t_ctx_p = self._patch(t_context)
-
-        p_c, z_t = self.jepa_model(x_ctx_p, t_ctx_p, asset_id=asset_id)
-        if self.jepa_loss_type == "mse":
-            loss = F.mse_loss(p_c, z_t)
-        elif self.jepa_loss_type in {"smoothl1", "smooth_l1"}:
-            loss = F.smooth_l1_loss(p_c, z_t)
-        else:
-            raise ValueError(f"Unknown JEPA loss type: {self.jepa_loss_type}")
-        pred_std = float(p_c.std(dim=-1).mean().detach().cpu().item())
-        tgt_std = float(z_t.std(dim=-1).mean().detach().cpu().item())
-        self.last_jepa_loss = loss
-        self.last_pred_std = pred_std
-        self.last_tgt_std = tgt_std
-        return loss, pred_std, tgt_std
 
     def forward(self, observations: Dict[str, th.Tensor]) -> th.Tensor:
         x_context = self._ensure_batched(observations["x_context"])
@@ -202,19 +164,22 @@ class PPOWithJEPA(PPO):
         seed: int | None = None,
         device: th.device | str = "auto",
         _init_setup_model: bool = True,
-        update_jepa: bool = True,
-        jepa_coef: float = 1.0,
+        update_jepa: bool = False,
         optimizer_name: str = "adam",
         optimizer_kwargs: dict[str, Any] | None = None,
         policy_learning_rate: float | None = None,
-        jepa_learning_rate: float | None = None,
     ):
+        if update_jepa:
+            raise ValueError(
+                "update_jepa=true is not supported in this branch. "
+                "JEPA auxiliary PPO updates are disabled."
+            )
+
         # Set custom optimizer fields before SB3 init, because SB3 may call
         # _setup_model() inside super().__init__ when _init_setup_model=True.
         self.optimizer_name = str(optimizer_name).lower()
         self.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
         self.policy_learning_rate = None if policy_learning_rate is None else float(policy_learning_rate)
-        self.jepa_learning_rate = None if jepa_learning_rate is None else float(jepa_learning_rate)
 
         super().__init__(
             policy=policy,
@@ -245,8 +210,7 @@ class PPOWithJEPA(PPO):
             _init_setup_model=_init_setup_model,
         )
 
-        self.update_jepa = update_jepa
-        self.jepa_coef = jepa_coef
+        self.update_jepa = False
 
     def _setup_model(self) -> None:
         super()._setup_model()
@@ -273,50 +237,39 @@ class PPOWithJEPA(PPO):
 
         scheduled_lr = float(self.lr_schedule(1.0))
         policy_lr = self.policy_learning_rate if self.policy_learning_rate is not None else scheduled_lr
-        jepa_lr = self.jepa_learning_rate if self.jepa_learning_rate is not None else policy_lr
-
-        jepa_params = []
         fx = getattr(self.policy, "features_extractor", None)
         jepa_model = getattr(fx, "jepa_model", None)
         if jepa_model is not None:
-            jepa_params = [p for p in jepa_model.parameters() if p.requires_grad]
+            trainable_jepa = [p for p in jepa_model.parameters() if p.requires_grad]
+            if trainable_jepa:
+                raise ValueError(
+                    "Found trainable JEPA parameters in PPO optimizer setup. "
+                    "Freeze JEPA (requires_grad=False) before PPO training."
+                )
 
-        jepa_param_ids = {id(p) for p in jepa_params}
-        policy_params = [p for p in self.policy.parameters() if p.requires_grad and id(p) not in jepa_param_ids]
-
-        param_groups = []
-        if policy_params:
-            param_groups.append({"params": policy_params, "lr": policy_lr, "group_name": "policy"})
-        if jepa_params:
-            param_groups.append({"params": jepa_params, "lr": jepa_lr, "group_name": "jepa"})
-        if not param_groups:
+        policy_params = [p for p in self.policy.parameters() if p.requires_grad]
+        if not policy_params:
             raise ValueError("No trainable parameters found for optimizer configuration.")
 
-        self.policy.optimizer = optimizer_class(param_groups, **optimizer_kwargs)
+        self.policy.optimizer = optimizer_class(
+            [{"params": policy_params, "lr": policy_lr, "group_name": "policy"}],
+            **optimizer_kwargs,
+        )
 
     def _update_group_learning_rates(self) -> None:
         scheduled_lr = float(self.lr_schedule(self._current_progress_remaining))
         policy_lr = self.policy_learning_rate if self.policy_learning_rate is not None else scheduled_lr
-        jepa_lr = self.jepa_learning_rate if self.jepa_learning_rate is not None else policy_lr
 
-        has_jepa_group = False
         for group in self.policy.optimizer.param_groups:
-            group_name = group.get("group_name", "policy")
-            if group_name == "jepa":
-                group["lr"] = jepa_lr
-                has_jepa_group = True
-            else:
-                group["lr"] = policy_lr
+            group["lr"] = policy_lr
 
         self.logger.record("train/lr_policy", float(policy_lr))
         self.logger.record("train/learning_rate", float(policy_lr))
-        if has_jepa_group:
-            self.logger.record("train/lr_jepa", float(jepa_lr))
 
     def train(self) -> None:
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
-        # Keep policy and JEPA optimizer groups on their configured rates.
+        # Keep policy optimizer groups on their configured rates.
         self._update_group_learning_rates()
         # Compute current clip range
         clip_range = self.clip_range(self._current_progress_remaining)
@@ -327,12 +280,8 @@ class PPOWithJEPA(PPO):
         entropy_losses = []
         pg_losses, value_losses = [], []
         clip_fractions = []
-        jepa_losses = []
-        jepa_pred_stds = []
-        jepa_tgt_stds = []
         weighted_entropy_losses = []
         weighted_value_losses = []
-        weighted_jepa_losses = []
         continue_training = True
 
         # train for n_epochs epochs
@@ -392,22 +341,6 @@ class PPOWithJEPA(PPO):
 
                 loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
-                jepa_loss = None
-                if self.update_jepa and hasattr(self.policy, "features_extractor"):
-                    fx = self.policy.features_extractor
-                    if hasattr(fx, "compute_jepa_aux"):
-                        jepa_loss, pred_std, tgt_std = fx.compute_jepa_aux(
-                            rollout_data.observations,
-                        )
-                        if jepa_loss is not None:
-                            loss = loss + self.jepa_coef * jepa_loss
-                            jepa_losses.append(jepa_loss.item())
-                            weighted_jepa_losses.append((self.jepa_coef * jepa_loss).item())
-                        if pred_std is not None:
-                            jepa_pred_stds.append(pred_std)
-                        if tgt_std is not None:
-                            jepa_tgt_stds.append(tgt_std)
-
                 # Calculate approximate form of reverse KL Divergence for early stopping
                 # see issue #417: https://github.com/DLR-RM/stable-baselines3/issues/417
                 with th.no_grad():
@@ -433,11 +366,6 @@ class PPOWithJEPA(PPO):
                 break
 
         # EMA update for JEPA target encoder
-        if self.update_jepa and hasattr(self.policy, "features_extractor"):
-            fx = self.policy.features_extractor
-            if hasattr(fx, "jepa_model"):
-                fx.jepa_model.ema_update(fx.jepa_model.ema_tau_max)
-
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
         reward_std = float(np.std(self.rollout_buffer.rewards)) if self.rollout_buffer.rewards.size else 0.0
 
@@ -454,14 +382,6 @@ class PPOWithJEPA(PPO):
         self.logger.record("train/loss", loss.item())
         self.logger.record("train/explained_variance", explained_var)
         self.logger.record("train/reward_std", reward_std)
-        if jepa_losses:
-            self.logger.record("train/jepa_loss", np.mean(jepa_losses))
-        if weighted_jepa_losses:
-            self.logger.record("train/weighted_jepa_loss", np.mean(weighted_jepa_losses))
-        if jepa_pred_stds:
-            self.logger.record("train/jepa_pred_std", np.mean(jepa_pred_stds))
-        if jepa_tgt_stds:
-            self.logger.record("train/jepa_tgt_std", np.mean(jepa_tgt_stds))
         if hasattr(self.policy, "log_std"):
             self.logger.record("train/std", th.exp(self.policy.log_std).mean().item())
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")

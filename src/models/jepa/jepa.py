@@ -14,7 +14,8 @@ class JEPA(nn.Module):
         dim_ff,
         dropout,
         predictor_num_layers=2,
-        mask_ratio=0.5,
+        context_tokens=64,
+        horizon_blocks=None,
     ):
         super().__init__()
         self.context_enc = context_enc
@@ -22,10 +23,19 @@ class JEPA(nn.Module):
 
         self.ema_tau_min = ema_tau_min
         self.ema_tau_max = ema_tau_max
-        self.mask_ratio = float(mask_ratio)
+        self.context_tokens = int(context_tokens)
+        if self.context_tokens <= 0:
+            raise ValueError(f"context_tokens must be > 0, got {self.context_tokens}")
 
-        self.mask_token = nn.Parameter(torch.empty(1, 1, d_model))
-        nn.init.normal_(self.mask_token, std=0.02)
+        if horizon_blocks is None:
+            horizon_blocks = {
+                "near": [1, 1],
+                "med": [2, 5],
+                "far": [6, 18],
+            }
+        self.horizon_slices, self.horizon_tokens = self._build_horizon_slices(horizon_blocks)
+        self.target_queries = nn.Parameter(torch.empty(1, self.horizon_tokens, d_model))
+        nn.init.normal_(self.target_queries, std=0.02)
 
         predictor_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -46,32 +56,63 @@ class JEPA(nn.Module):
         for p in self.target_enc.parameters():
             p.requires_grad_(False)
 
-    def generate_masks(self, B: int, N: int, device) -> tuple[torch.Tensor, torch.Tensor]:
-        num_masked = int(N * self.mask_ratio)
-        num_masked = max(1, min(N - 1, num_masked))
-
-        perm = torch.argsort(torch.rand(B, N, device=device), dim=1)
-        target_indices = perm[:, :num_masked]
-        context_indices = perm[:, num_masked:]
-        target_indices, _ = torch.sort(target_indices, dim=1)
-        context_indices, _ = torch.sort(context_indices, dim=1)
-        return context_indices, target_indices
-
     @staticmethod
-    def _gather_tokens(x: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-        gather_idx = indices.unsqueeze(-1).expand(-1, -1, x.size(-1))
-        return x.gather(1, gather_idx)
+    def _build_horizon_slices(horizon_blocks: dict[str, list[int]]) -> tuple[dict[str, slice], int]:
+        if not horizon_blocks:
+            raise ValueError("horizon_blocks must be a non-empty dict.")
 
-    def forward_masked(self, X_ctx, T_ctx, asset_id=None):
-        B, N = X_ctx.shape[:2]
-        context_indices, target_indices = self.generate_masks(B, N, X_ctx.device)
+        parsed: list[tuple[str, int, int]] = []
+        for name, bounds in horizon_blocks.items():
+            if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
+                raise ValueError(f"horizon_blocks[{name}] must be [start, end], got {bounds}.")
+            start, end = int(bounds[0]), int(bounds[1])
+            if start < 1 or end < start:
+                raise ValueError(
+                    f"horizon_blocks[{name}] must satisfy 1 <= start <= end, got [{start}, {end}]."
+                )
+            parsed.append((name, start, end))
 
-        X_ctx_visible = self._gather_tokens(X_ctx, context_indices)
-        T_ctx_visible = self._gather_tokens(T_ctx, context_indices)
+        parsed.sort(key=lambda x: x[1])
+        if parsed[0][1] != 1:
+            raise ValueError("horizon blocks must start at 1 and be contiguous.")
+
+        prev_end = 0
+        slices: dict[str, slice] = {}
+        for name, start, end in parsed:
+            if start != prev_end + 1:
+                raise ValueError(
+                    "horizon blocks must be contiguous without gaps/overlaps; "
+                    f"expected start {prev_end + 1}, got {start} for block '{name}'."
+                )
+            slices[name] = slice(start - 1, end)
+            prev_end = end
+
+        return slices, prev_end
+
+    def forward(self, X_full, T_full, asset_id=None):
+        B, N = X_full.shape[:2]
+        required_tokens = self.context_tokens + self.horizon_tokens
+        if N < required_tokens:
+            raise ValueError(
+                f"Expected at least {required_tokens} patched tokens "
+                f"(context_tokens={self.context_tokens}, horizon_tokens={self.horizon_tokens}), got {N}."
+            )
+
+        X_ctx = X_full[:, :self.context_tokens]
+        T_ctx = T_full[:, :self.context_tokens]
+        X_future = X_full[:, self.context_tokens:required_tokens]
+        T_future = T_full[:, self.context_tokens:required_tokens]
+
+        context_indices = torch.arange(
+            self.context_tokens, device=X_full.device
+        ).unsqueeze(0).expand(B, -1)
+        future_indices = torch.arange(
+            self.context_tokens, required_tokens, device=X_full.device
+        ).unsqueeze(0).expand(B, -1)
 
         z_context = self.context_enc(
-            X_ctx_visible,
-            T_ctx_visible,
+            X_ctx,
+            T_ctx,
             asset_id=asset_id,
             patch_indices=context_indices,
             return_tokens=True,
@@ -79,26 +120,21 @@ class JEPA(nn.Module):
 
         with torch.no_grad():
             self.target_enc.eval()
-            z_target_full = self.target_enc(
-                X_ctx,
-                T_ctx,
+            z_target = self.target_enc(
+                X_future,
+                T_future,
                 asset_id=asset_id,
+                patch_indices=future_indices,
                 return_tokens=True,
             )
-            z_target = self._gather_tokens(z_target_full, target_indices)
 
-        num_masked = target_indices.size(1)
-        mask_tokens = self.mask_token.expand(B, num_masked, -1)
-        pos_tokens = self.context_enc.get_patch_positional_embeddings(target_indices)
-        masked_targets = mask_tokens + pos_tokens
+        query_tokens = self.target_queries.expand(B, self.horizon_tokens, -1)
+        query_tokens = query_tokens + self.context_enc.get_patch_positional_embeddings(future_indices)
 
-        predictor_input = torch.cat([z_context, masked_targets], dim=1)
+        predictor_input = torch.cat([z_context, query_tokens], dim=1)
         pred_all = self.predictor_norm(self.predictor(predictor_input))
-        pred_masked = pred_all[:, -num_masked:, :]
-        return pred_masked, z_target
-
-    def forward(self, X_ctx, T_ctx, asset_id=None):
-        return self.forward_masked(X_ctx, T_ctx, asset_id=asset_id)
+        pred_future = pred_all[:, -self.horizon_tokens :, :]
+        return pred_future, z_target
 
     @torch.no_grad()
     def ema_update(self, decay):

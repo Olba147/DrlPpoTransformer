@@ -18,9 +18,9 @@
     "timeframe": "15min"
   },
   "training": {
-    "epochs": 50,
-    "batch_size_train": 1024,
-    "batch_size_eval": 1024,
+    "epochs": 100,
+    "batch_size_train": 512,
+    "batch_size_eval": 512,
     "learning_rate": 0.0001,
     "log_every": 500,
     "checkpoint_every_epochs": 10,
@@ -37,14 +37,19 @@
   "jepa_model": {
     "patch_len": 8,
     "patch_stride": 8,
-    "d_model": 64,
+    "context_len_steps": 512,
+    "horizon_blocks": {
+      "near": [1, 1],
+      "med": [2, 5],
+      "far": [6, 18]
+    },
+    "d_model": 96,
     "n_features": 9,
     "n_time_features": 2,
     "nhead": 4,
-    "num_layers": 4,
-    "dim_ff": 256,
-    "dropout": 0.0,
-    "mask_ratio": 0.7,
+    "num_layers": 3,
+    "dim_ff": 384,
+    "dropout": 0.1,
     "predictor_num_layers": 2,
     "ema_tau_min": 0.99,
     "ema_tau_max": 0.999,

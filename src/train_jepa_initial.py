@@ -34,17 +34,59 @@ def _build_dataset_kwargs(cfg: dict) -> dict:
         "test_end_date": dataset_cfg.get("test_end_date"),
     }
 
-def _get_loss_fn(cfg: dict) -> torch.nn.Module:
-    if cfg["loss_type"] == "mse":
-        return torch.nn.MSELoss()
-    elif cfg["loss_type"] == "smoothL1":
-        return torch.nn.SmoothL1Loss()
 
-    else:
-        raise ValueError(f"Unknown loss type: {cfg['loss_type']}")
+def _parse_horizon_blocks(horizon_blocks: dict[str, list[int]]) -> tuple[dict[str, slice], int]:
+    if not horizon_blocks:
+        raise ValueError("jepa_model.horizon_blocks must be a non-empty dict.")
+
+    parsed: list[tuple[str, int, int]] = []
+    for name, bounds in horizon_blocks.items():
+        if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
+            raise ValueError(f"horizon_blocks[{name}] must be [start, end], got {bounds}.")
+        start, end = int(bounds[0]), int(bounds[1])
+        if start < 1 or end < start:
+            raise ValueError(
+                f"horizon_blocks[{name}] must satisfy 1 <= start <= end, got [{start}, {end}]."
+            )
+        parsed.append((name, start, end))
+
+    parsed.sort(key=lambda x: x[1])
+    if parsed[0][1] != 1:
+        raise ValueError("horizon blocks must start at 1 and be contiguous.")
+
+    prev_end = 0
+    slices: dict[str, slice] = {}
+    for name, start, end in parsed:
+        if start != prev_end + 1:
+            raise ValueError(
+                "horizon blocks must be contiguous without gaps/overlaps; "
+                f"expected start {prev_end + 1}, got {start} for block '{name}'."
+            )
+        slices[name] = slice(start - 1, end)
+        prev_end = end
+    return slices, prev_end
 
 
-class MaskedJEPAPretrainModel(nn.Module):
+class MultiHorizonEqualLoss(nn.Module):
+    def __init__(self, base_loss_type: str, horizon_slices: dict[str, slice]):
+        super().__init__()
+        loss_type = str(base_loss_type).lower()
+        if loss_type == "mse":
+            self.base_loss = torch.nn.MSELoss()
+        elif loss_type in {"smoothl1", "smooth_l1"}:
+            self.base_loss = torch.nn.SmoothL1Loss()
+        else:
+            raise ValueError(f"Unknown loss type: {base_loss_type}")
+        self.horizon_slices = dict(horizon_slices)
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        losses = []
+        for horizon_slice in self.horizon_slices.values():
+            losses.append(self.base_loss(pred[:, horizon_slice, :], target[:, horizon_slice, :]))
+        return torch.stack(losses).mean()
+
+
+class JEPAPretrainModel(nn.Module):
     def __init__(self, jepa_model: JEPA):
         super().__init__()
         self.jepa_model = jepa_model
@@ -52,7 +94,7 @@ class MaskedJEPAPretrainModel(nn.Module):
         self.ema_tau_max = jepa_model.ema_tau_max
 
     def forward(self, X_ctx, T_ctx, asset_id=None):
-        return self.jepa_model.forward_masked(X_ctx, T_ctx, asset_id=asset_id)
+        return self.jepa_model(X_ctx, T_ctx, asset_id=asset_id)
 
     @torch.no_grad()
     def ema_update(self, decay):
@@ -74,7 +116,40 @@ def main(config_path: str):
     train_cfg = cfg["training"]
     model_cfg = cfg["jepa_model"]
     loss_cfg = cfg["loss"]
+
+    patch_len = int(model_cfg["patch_len"])
+    patch_stride = int(model_cfg["patch_stride"])
+    context_len_steps = int(model_cfg.get("context_len_steps", cfg["dataset"]["context_len"]))
+    if context_len_steps < patch_len:
+        raise ValueError(
+            f"context_len_steps must be >= patch_len ({patch_len}), got {context_len_steps}."
+        )
+    if (context_len_steps - patch_len) % patch_stride != 0:
+        raise ValueError(
+            f"(context_len_steps - patch_len) must be divisible by patch_stride. "
+            f"Got context_len_steps={context_len_steps}, patch_len={patch_len}, patch_stride={patch_stride}."
+        )
+
+    horizon_blocks = model_cfg.get(
+        "horizon_blocks",
+        {
+            "near": [1, 1],
+            "med": [2, 5],
+            "far": [6, 18],
+        },
+    )
+    horizon_slices, horizon_tokens = _parse_horizon_blocks(horizon_blocks)
+    context_tokens = 1 + (context_len_steps - patch_len) // patch_stride
+    total_tokens = context_tokens + horizon_tokens
+    total_steps = (total_tokens - 1) * patch_stride + patch_len
+
     run_dataset_kwargs = _build_dataset_kwargs(cfg)
+    run_dataset_kwargs["size"] = total_steps
+    print(
+        "JEPA multi-horizon setup: "
+        f"context_steps={context_len_steps}, context_tokens={context_tokens}, "
+        f"horizon_tokens={horizon_tokens}, sample_steps={total_steps}"
+    )
 
     print("Loading dataset...")
     dataloaders = DataLoaders(
@@ -127,7 +202,8 @@ def main(config_path: str):
         dim_ff=model_cfg["dim_ff"],
         dropout=model_cfg["dropout"],
         predictor_num_layers=model_cfg.get("predictor_num_layers", 2),
-        mask_ratio=model_cfg.get("mask_ratio", 0.5),
+        context_tokens=context_tokens,
+        horizon_blocks=horizon_blocks,
     )
 
     checkpoint_dir = os.path.join(paths_cfg.get("checkpoint_root", "checkpoints"), model_name)
@@ -159,13 +235,13 @@ def main(config_path: str):
         epoch = 0
         global_step = 0
 
-    loss_fn = _get_loss_fn(loss_cfg)
+    loss_fn = MultiHorizonEqualLoss(loss_cfg["loss_type"], horizon_slices)
 
     opt = torch.optim.Adam(
         list(jepa_model.context_enc.parameters())
         + list(jepa_model.predictor.parameters())
         + list(jepa_model.predictor_norm.parameters())
-        + [jepa_model.mask_token],
+        + [jepa_model.target_queries],
         lr=train_cfg["learning_rate"],
     )
 
@@ -204,7 +280,7 @@ def main(config_path: str):
     ]
 
     learn = Learner(
-        model=MaskedJEPAPretrainModel(jepa_model),
+        model=JEPAPretrainModel(jepa_model),
         train_dl=train_loader,
         val_dl=val_loader,
         loss_func=loss_fn,

@@ -116,6 +116,12 @@ def main(config_path: str | None = None):
     eval_cfg = cfg["evaluation"]
     jepa_cfg = cfg["jepa_model"]
 
+    if ppo_cfg.get("update_jepa", False):
+        raise ValueError(
+            "PPO JEPA auxiliary updates are disabled in this branch. "
+            "Set ppo.update_jepa to false."
+        )
+
     checkpoint_root = paths_cfg.get("checkpoint_root", "checkpoints")
     log_root = paths_cfg.get("log_root", "logs")
     jepa_checkpoint_dir = paths_cfg.get("jepa_checkpoint_dir")
@@ -217,6 +223,28 @@ def main(config_path: str | None = None):
     print(f"Asset embeddings: {use_asset_embeddings}, {encoder_num_assets} assets")
 
     print("Loading JEPA encoder...")
+    patch_len = int(jepa_cfg["patch_len"])
+    patch_stride = int(jepa_cfg["patch_stride"])
+    context_len_steps = int(jepa_cfg.get("context_len_steps", dataset_cfg["context_len"]))
+    if context_len_steps < patch_len:
+        raise ValueError(
+            f"jepa_model.context_len_steps must be >= patch_len ({patch_len}), got {context_len_steps}."
+        )
+    if (context_len_steps - patch_len) % patch_stride != 0:
+        raise ValueError(
+            f"(context_len_steps - patch_len) must be divisible by patch_stride. "
+            f"Got context_len_steps={context_len_steps}, patch_len={patch_len}, patch_stride={patch_stride}."
+        )
+    context_tokens = 1 + (context_len_steps - patch_len) // patch_stride
+    horizon_blocks = jepa_cfg.get(
+        "horizon_blocks",
+        {
+            "near": [1, 1],
+            "med": [2, 5],
+            "far": [6, 18],
+        },
+    )
+
     jepa_context_encoder = PatchTSTEncoder(
         patch_len=jepa_cfg["patch_len"],
         d_model=jepa_cfg["d_model"],
@@ -241,7 +269,8 @@ def main(config_path: str | None = None):
         dim_ff=jepa_cfg["dim_ff"],
         dropout=jepa_cfg["dropout"],
         predictor_num_layers=jepa_cfg.get("predictor_num_layers", 2),
-        mask_ratio=jepa_cfg.get("mask_ratio", 0.5),
+        context_tokens=context_tokens,
+        horizon_blocks=horizon_blocks,
     )
 
     checkpoint_path = jepa_checkpoint_path
@@ -256,21 +285,18 @@ def main(config_path: str | None = None):
     else:
         print("No JEPA checkpoint found, using randomly initialized encoder.")
 
-    if not ppo_cfg.get("update_jepa", True):
-        for param in jepa_model.parameters():
-            param.requires_grad = False
-        jepa_model.eval()
+    for param in jepa_model.parameters():
+        param.requires_grad = False
+    jepa_model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    jepa_loss_type = ppo_cfg.get("jepa_loss_type", "mse")
     optimizer_name = ppo_cfg.get("optimizer", "adam")
     optimizer_kwargs = ppo_cfg.get("optimizer_kwargs")
     policy_learning_rate = ppo_cfg.get("policy_learning_rate")
-    jepa_learning_rate = ppo_cfg.get("jepa_learning_rate")
     print(
         "Optimizer setup: "
         f"name={optimizer_name}, policy_lr={policy_learning_rate or ppo_cfg['learning_rate']}, "
-        f"jepa_lr={jepa_learning_rate if jepa_learning_rate is not None else 'same_as_policy'}"
+        "jepa_lr=frozen"
     )
     policy_kwargs = dict(
         features_extractor_class=JEPAAuxFeatureExtractor,
@@ -279,7 +305,6 @@ def main(config_path: str | None = None):
             embedding_dim=jepa_cfg["d_model"],
             patch_len=jepa_cfg["patch_len"],
             patch_stride=jepa_cfg["patch_stride"],
-            jepa_loss_type=jepa_loss_type,
             attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
         net_arch=dict(pi=[256, 256], vf=[256, 256])
@@ -300,15 +325,11 @@ def main(config_path: str | None = None):
             custom_objects={"policy_kwargs": policy_kwargs},
         )
         model.tensorboard_log = log_root
-        model.update_jepa = ppo_cfg.get("update_jepa", True)
-        model.jepa_coef = ppo_cfg.get("jepa_loss_coef", 0.01)
+        model.update_jepa = False
         model.optimizer_name = str(optimizer_name).lower()
         model.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
         model.policy_learning_rate = (
             None if policy_learning_rate is None else float(policy_learning_rate)
-        )
-        model.jepa_learning_rate = (
-            None if jepa_learning_rate is None else float(jepa_learning_rate)
         )
         model.configure_optimizer()
     else:
@@ -326,8 +347,7 @@ def main(config_path: str | None = None):
             vf_coef=ppo_cfg["vf_coef"],
             max_grad_norm=ppo_cfg["max_grad_norm"],
             target_kl=ppo_cfg["target_kl"],
-            update_jepa=ppo_cfg.get("update_jepa", True),
-            jepa_coef=ppo_cfg.get("jepa_loss_coef", 0.01),
+            update_jepa=False,
             policy_kwargs=policy_kwargs,
             device=device,
             verbose=1,
@@ -335,7 +355,6 @@ def main(config_path: str | None = None):
             optimizer_name=optimizer_name,
             optimizer_kwargs=optimizer_kwargs,
             policy_learning_rate=policy_learning_rate,
-            jepa_learning_rate=jepa_learning_rate,
         )
 
     class JEPACheckpoint(BaseCallback):
