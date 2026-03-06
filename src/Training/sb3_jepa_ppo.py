@@ -269,6 +269,12 @@ class PPOWithJEPA(PPO):
     def train(self) -> None:
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
+        # Keep JEPA frozen in eval mode so dropout/BN behavior stays deterministic
+        # even when the policy is in training mode.
+        fx = getattr(self.policy, "features_extractor", None)
+        jepa_model = getattr(fx, "jepa_model", None)
+        if jepa_model is not None:
+            jepa_model.eval()
         # Keep policy optimizer groups on their configured rates.
         self._update_group_learning_rates()
         # Compute current clip range
