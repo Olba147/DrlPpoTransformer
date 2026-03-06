@@ -63,7 +63,7 @@
     "update_jepa": false,
     "jepa_loss_coef": 0.1,
     "jepa_loss_type": "smoothL1",
-    "policy_learning_rate": 0.0001,
+    "policy_learning_rate": 0.0003,
     "jepa_learning_rate": 0.00001
   },
   "evaluation": {
