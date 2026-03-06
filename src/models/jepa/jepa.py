@@ -37,7 +37,7 @@ class JEPA(nn.Module):
         self.target_queries = nn.Parameter(torch.empty(1, self.horizon_tokens, d_model))
         nn.init.normal_(self.target_queries, std=0.02)
 
-        predictor_layer = nn.TransformerEncoderLayer(
+        predictor_layer = nn.TransformerDecoderLayer(
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=dim_ff,
@@ -46,7 +46,7 @@ class JEPA(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.predictor = nn.TransformerEncoder(
+        self.predictor = nn.TransformerDecoder(
             predictor_layer,
             num_layers=int(predictor_num_layers),
         )
@@ -131,9 +131,12 @@ class JEPA(nn.Module):
         query_tokens = self.target_queries.expand(B, self.horizon_tokens, -1)
         query_tokens = query_tokens + self.context_enc.get_patch_positional_embeddings(future_indices)
 
-        predictor_input = torch.cat([z_context, query_tokens], dim=1)
-        pred_all = self.predictor_norm(self.predictor(predictor_input))
-        pred_future = pred_all[:, -self.horizon_tokens :, :]
+        pred_future = self.predictor_norm(
+            self.predictor(
+                tgt=query_tokens,
+                memory=z_context,
+            )
+        )
         return pred_future, z_target
 
     @torch.no_grad()
