@@ -4,7 +4,7 @@
     "checkpoint_root": "checkpoints",
     "log_root": "logs",
     "jepa_checkpoint_dir": "checkpoints/jepa_initial6",
-    "ticker_list_path": "configs/assets/tickers1.txt",
+    "ticker_list_path": "configs/assets/tickers4.txt",
     "asset_universe_path": null
   },
   "resume": {
