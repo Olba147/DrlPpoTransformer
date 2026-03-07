@@ -279,7 +279,7 @@ def main(config_path: str):
         horizon_slices,
         near_weight=1.0,
         med_weight=1.0,
-        far_weight=0.5,
+        far_weight=1.0,
     )
 
     opt = torch.optim.AdamW(
