@@ -12,6 +12,7 @@ from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 from Training.callbacks import CSVLogger, CheckpointCallback, PatchingCallback, StatsPrinter
 from Training.engine import Learner
+import torch.nn.functional as F
 
 
 def _build_dataset_kwargs(cfg: dict) -> dict:
@@ -102,8 +103,8 @@ class MultiHorizonWeightedLoss(nn.Module):
         med_slice = self.horizon_slices["med"]
         far_slice = self.horizon_slices["far"]
 
-        pred = pred.normalize(dim=-1)
-        target = target.normalize(dim=-1)
+        pred = F.normalize(pred, dim=-1)
+        target = F.normalize(target, dim=-1)
 
         loss_near = self.base_loss(pred[:, near_slice, :], target[:, near_slice, :])
         loss_med = self.base_loss(pred[:, med_slice, :], target[:, med_slice, :])
