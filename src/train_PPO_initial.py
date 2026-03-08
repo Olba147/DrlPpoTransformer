@@ -308,7 +308,7 @@ def main(config_path: str | None = None):
             attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
         ),
         share_features_extractor=False,
-        net_arch=dict(pi=[128, 128], vf=[256, 256])
+        net_arch=dict(pi=[256, 256], vf=[256, 256])
     )
 
     resume_path = resume_cfg.get("path")
