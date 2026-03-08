@@ -358,21 +358,6 @@ def main(config_path: str | None = None):
             policy_learning_rate=policy_learning_rate,
         )
 
-    class JEPACheckpoint(BaseCallback):
-        def __init__(self, jepa_model: JEPA, save_dir: str, every_n_steps: int):
-            super().__init__()
-            self.jepa_model = jepa_model
-            self.save_dir = save_dir
-            self.every_n_steps = every_n_steps
-
-        def _on_step(self) -> bool:
-            if self.n_calls % self.every_n_steps != 0:
-                return True
-            os.makedirs(self.save_dir, exist_ok=True)
-            path = os.path.join(self.save_dir, f"jepa_step_{self.n_calls}.pt")
-            torch.save({"model": self.jepa_model.state_dict(), "step": self.n_calls}, path)
-            return True
-
     class JEPABestSync(BaseCallback):
         def __init__(self, jepa_model: JEPA, ppo_best_path: str, save_dir: str):
             super().__init__()
@@ -423,11 +408,6 @@ def main(config_path: str | None = None):
             save_path=f"{checkpoint_root}/{model_name}/last_model.zip",
             every_n_steps=eval_cfg["checkpoint_every_steps"],
             verbose=1,
-        ),
-        JEPACheckpoint(
-            jepa_model=jepa_model,
-            save_dir=f"{checkpoint_root}/{model_name}",
-            every_n_steps=eval_cfg["checkpoint_every_steps"],
         ),
         JEPABestSync(
             jepa_model=jepa_model,
