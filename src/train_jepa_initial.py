@@ -108,9 +108,10 @@ class MultiHorizonWeightedLoss(nn.Module):
 
         loss_near = self.base_loss(pred[:, near_slice, :], target[:, near_slice, :])
         loss_med = self.base_loss(pred[:, med_slice, :], target[:, med_slice, :])
-        pred_far_pooled = pred[:, far_slice, :].mean(dim=1)
-        tgt_far_pooled = target[:, far_slice, :].mean(dim=1)
-        loss_far = self.base_loss(pred_far_pooled, tgt_far_pooled)
+        # pred_far_pooled = pred[:, far_slice, :].mean(dim=1)
+        # tgt_far_pooled = target[:, far_slice, :].mean(dim=1)
+        # loss_far = self.base_loss(pred_far_pooled, tgt_far_pooled)
+        loss_far = self.base_loss(pred[:, far_slice, :], target[:, far_slice, :])
 
         total = (
             self.near_weight * loss_near
