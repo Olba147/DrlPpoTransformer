@@ -6,7 +6,6 @@ import torch
 import copy
 
 from config.config_utils import load_json_config
-from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
@@ -358,25 +357,6 @@ def main(config_path: str | None = None):
             policy_learning_rate=policy_learning_rate,
         )
 
-    class JEPABestSync(BaseCallback):
-        def __init__(self, jepa_model: JEPA, ppo_best_path: str, save_dir: str):
-            super().__init__()
-            self.jepa_model = jepa_model
-            self.ppo_best_path = ppo_best_path
-            self.save_dir = save_dir
-            self._last_mtime = None
-
-        def _on_step(self) -> bool:
-            if not os.path.exists(self.ppo_best_path):
-                return True
-            mtime = os.path.getmtime(self.ppo_best_path)
-            if self._last_mtime is None or mtime > self._last_mtime:
-                os.makedirs(self.save_dir, exist_ok=True)
-                path = os.path.join(self.save_dir, "best_jepa_ppo.pt")
-                torch.save({"model": self.jepa_model.state_dict(), "step": self.n_calls}, path)
-                self._last_mtime = mtime
-            return True
-
     callbacks = [
         CustomTensorboardCallback(),
         EntropyScheduleCallback(
@@ -408,11 +388,6 @@ def main(config_path: str | None = None):
             save_path=f"{checkpoint_root}/{model_name}/last_model.zip",
             every_n_steps=eval_cfg["checkpoint_every_steps"],
             verbose=1,
-        ),
-        JEPABestSync(
-            jepa_model=jepa_model,
-            ppo_best_path=f"{checkpoint_root}/{model_name}/best_model.zip",
-            save_dir=f"{checkpoint_root}/{model_name}",
         ),
     ]
 
