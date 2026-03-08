@@ -4,7 +4,7 @@
     "checkpoint_root": "checkpoints",
     "log_root": "logs",
     "jepa_checkpoint_dir": "checkpoints/jepa_initial6",
-    "ticker_list_path": "configs/assets/tickers4.txt",
+    "ticker_list_path": "configs/assets/tickers1.txt",
     "asset_universe_path": null
   },
   "resume": {
@@ -42,27 +42,20 @@
   "ppo": {
     "rollout_length_steps": 1024,
     "total_timesteps": 10000000,
-    "learning_rate": 0.0001,
-    "optimizer": "adamw",
-    "optimizer_kwargs": {
-      "weight_decay": 1e-5,
-      "eps": 1e-5
-    },
-    "n_epochs": 4,
+    "learning_rate": 0.0003,
+    "n_epochs": 3,
     "batch_size": 1024,
-    "gamma": 0.995,
+    "gamma": 0.99,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef_start": 0.05,
+    "ent_coef_start": 0.02,
     "ent_coef_end": 0.0005,
     "ent_decay_steps": 6000000,
     "ent_warmup_fraction": 0.0,
     "vf_coef": 0.5,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
-    "update_jepa": false,
-    "policy_learning_rate": 0.0003,
-    "normalize_rewards": true
+    "policy_learning_rate": 0.0003
   },
   "evaluation": {
     "episodes": 32,
