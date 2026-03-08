@@ -1,5 +1,5 @@
 {
-  "model_name": "jepa_wfv_smoke",
+  "model_name": "jepa_pretrain_all",
   "paths": {
     "checkpoint_root": "checkpoints",
     "log_root": "logs"
@@ -9,7 +9,7 @@
     "data_path": "data_raw_1m",
     "start_date": null,
     "split": "train",
-    "context_len": 128,
+    "context_len": 512,
     "use_time_features": true,
     "rolling_window": 252,
     "train_split": 0.7,
@@ -18,38 +18,38 @@
     "timeframe": "15min"
   },
   "training": {
-    "epochs": 1,
-    "batch_size_train": 64,
-    "batch_size_eval": 64,
-    "learning_rate": 0.0003,
-    "log_every": 50,
+    "epochs": 100,
+    "batch_size_train": 1024,
+    "batch_size_eval": 1024,
+    "learning_rate": 0.0001,
+    "log_every": 500,
     "checkpoint_every_epochs": 10,
-    "dont_save_for_epochs": 0,
     "amp": true,
     "grad_clip": 1.0,
-    "num_workers": 0,
-    "pin_memory": false,
+    "num_workers": 8,
+    "pin_memory": true,
     "drop_last_train": false,
     "drop_last_eval": false,
-    "persistent_workers": false,
+    "persistent_workers": true,
     "prefetch_factor": 2,
-    "warmup_epochs": 1
+    "warmup_epochs": 50,
+    "weight_decay": 1e-5
   },
   "jepa_model": {
     "patch_len": 8,
     "patch_stride": 8,
-    "context_len_steps": 128,
+    "context_len_steps": 512,
     "horizon_blocks": {
       "near": [1, 1],
       "med": [2, 5],
       "far": [6, 17]
     },
-    "d_model": 192,
+    "d_model": 64,
     "n_features": 9,
     "n_time_features": 2,
     "nhead": 4,
     "num_layers": 4,
-    "dim_ff": 768,
+    "dim_ff": 256,
     "dropout": 0.0,
     "predictor_num_layers": 2,
     "ema_tau_min": 0.99,

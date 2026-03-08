@@ -13,7 +13,7 @@ from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
 from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 
-DEFAULT_PPO_CONFIG_PATH = "configs/ppo_jepa_train.json"
+DEFAULT_PPO_CONFIG_PATH = "configs/ppo_single_asset_base.json"
 
 
 def _build_dataset_kwargs(cfg: dict, split: str) -> dict:
