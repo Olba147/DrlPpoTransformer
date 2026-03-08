@@ -34,7 +34,7 @@
     "transaction_cost_schedule_timesteps": 6000000,
     "transaction_cost_warmup": 0,
     "include_wealth": false,
-    "include_asset_id": true,
+    "include_asset_id": false,
     "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
@@ -85,7 +85,7 @@
     "nhead": 4,
     "num_layers": 4,
     "dim_ff": 256,
-    "dropout": 0.20,
+    "dropout": 0.0,
     "predictor_num_layers": 2,
     "ema_tau_min": 0.99,
     "ema_tau_max": 0.999,
