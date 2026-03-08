@@ -7,7 +7,7 @@ import copy
 
 from config.config_utils import load_json_config
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
 from Training.callbacks import (
@@ -211,6 +211,32 @@ def main(config_path: str | None = None):
             for _ in range(eval_n_envs)
         ]
     )
+    normalize_rewards = bool(ppo_cfg.get("normalize_rewards", False))
+    reward_norm_gamma = float(ppo_cfg.get("reward_norm_gamma", ppo_cfg["gamma"]))
+    reward_norm_clip = float(ppo_cfg.get("reward_norm_clip", 10.0))
+    if normalize_rewards:
+        print(
+            "VecNormalize reward normalization enabled: "
+            f"gamma={reward_norm_gamma}, clip_reward={reward_norm_clip}"
+        )
+        train_env = VecNormalize(
+            train_env,
+            training=True,
+            norm_obs=False,
+            norm_reward=True,
+            gamma=reward_norm_gamma,
+            clip_reward=reward_norm_clip,
+        )
+        eval_env = VecNormalize(
+            eval_env,
+            training=False,
+            norm_obs=False,
+            norm_reward=True,
+            gamma=reward_norm_gamma,
+            clip_reward=reward_norm_clip,
+        )
+        # Share running reward stats so eval uses train-time normalization.
+        eval_env.ret_rms = train_env.ret_rms
     print(
         "Evaluation setup: "
         f"{eval_n_envs} envs, "

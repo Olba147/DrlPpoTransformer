@@ -57,11 +57,12 @@
     "ent_coef_end": 0.0005,
     "ent_decay_steps": 6000000,
     "ent_warmup_fraction": 0.0,
-    "vf_coef": 0.7,
+    "vf_coef": 0.5,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
     "update_jepa": false,
-    "policy_learning_rate": 0.0003
+    "policy_learning_rate": 0.0003,
+    "normalize_rewards": true
   },
   "evaluation": {
     "episodes": 32,
