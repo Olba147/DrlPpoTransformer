@@ -529,18 +529,24 @@ class RewardEvalCallback(EvalCallback):
 
 
 class LastModelCallback(BaseCallback):
-    def __init__(self, save_path: str, verbose: int = 0):
+    def __init__(self, save_path: str, every_n_steps: int | None = None, verbose: int = 0):
         super().__init__(verbose=verbose)
         self.save_path = save_path
+        self.every_n_steps = None if every_n_steps is None else max(1, int(every_n_steps))
 
-    def _on_step(self) -> bool:
-        return True
-
-    def _on_training_end(self) -> None:
+    def _save(self, reason: str) -> None:
         os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
         self.model.save(self.save_path)
         if self.verbose >= 1:
-            print(f"[LastModelCallback] Saved final model to {self.save_path}")
+            print(f"[LastModelCallback] Saved {reason} model to {self.save_path}")
+
+    def _on_step(self) -> bool:
+        if self.every_n_steps and (self.n_calls % self.every_n_steps == 0):
+            self._save("periodic")
+        return True
+
+    def _on_training_end(self) -> None:
+        self._save("final")
 
 
 class EntropyScheduleCallback(BaseCallback):
