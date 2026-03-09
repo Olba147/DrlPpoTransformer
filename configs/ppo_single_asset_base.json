@@ -10,7 +10,7 @@
   },
   "resume": {
     "path": null,
-    "auto_resume": true
+    "auto_resume": false
   },
   "dataset": {
     "root_path": "Data/polygon",
@@ -41,7 +41,7 @@
     "action_mode": "discrete_3"
   },
   "ppo": {
-    "rollout_length_steps": 256,
+    "rollout_length_steps": 512,
     "total_timesteps": 2000000,
     "learning_rate": 0.0003,
     "n_epochs": 3,

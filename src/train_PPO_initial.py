@@ -391,10 +391,24 @@ def main(config_path: str | None = None):
         ),
     ]
 
+    reset_num_timesteps_cfg = ppo_cfg.get("reset_num_timesteps")
+    if reset_num_timesteps_cfg is None:
+        # Default to non-cumulative timesteps unless user explicitly opts in.
+        reset_num_timesteps = True
+    else:
+        reset_num_timesteps = bool(reset_num_timesteps_cfg)
+
+    print(
+        "PPO learn setup: "
+        f"total_timesteps={int(ppo_cfg['total_timesteps'])}, "
+        f"reset_num_timesteps={reset_num_timesteps}, "
+        f"resume_path={resume_path if resume_path else 'None'}"
+    )
+
     model.learn(
-        total_timesteps=ppo_cfg["total_timesteps"],
+        total_timesteps=int(ppo_cfg["total_timesteps"]),
         callback=callbacks,
-        reset_num_timesteps=False,
+        reset_num_timesteps=reset_num_timesteps,
         tb_log_name=model_name,
     )
 
