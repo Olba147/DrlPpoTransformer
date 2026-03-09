@@ -27,7 +27,7 @@
     "timeframe": "15min"
   },
   "env": {
-    "episode_length_steps": 1024,
+    "episode_length_steps": 2048,
     "n_envs": 16,
     "transaction_cost_start": 0.0005,
     "transaction_cost_end": 0.0005,

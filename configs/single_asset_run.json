@@ -10,7 +10,7 @@
     "jepa_checkpoint_path": null
   },
   "training": {
-    "skip_existing": false
+    "skip_existing": true
   },
   "output": {
     "run_name": "single_asset_run1",
