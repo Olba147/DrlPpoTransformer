@@ -28,7 +28,7 @@
   },
   "env": {
     "episode_length_steps": 2048,
-    "n_envs": 16,
+    "n_envs": 8,
     "transaction_cost_start": 0.0005,
     "transaction_cost_end": 0.0005,
     "transaction_cost_steps": 0,
@@ -43,7 +43,7 @@
   "ppo": {
     "rollout_length_steps": 512,
     "total_timesteps": 2000000,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "n_epochs": 3,
     "batch_size": 256,
     "gamma": 0.99,
@@ -56,7 +56,7 @@
     "vf_coef": 0.5,
     "max_grad_norm": 0.5,
     "target_kl": 0.015,
-    "policy_learning_rate": 0.0003
+    "policy_learning_rate": 0.0001
   },
   "evaluation": {
     "episodes": 8,
