@@ -41,7 +41,7 @@
   "ppo": {
     "feature_mode": "basic",
     "share_features_extractor": false,
-    "net_arch_pi": [256, 256],
+    "net_arch_pi": [512, 512],
     "net_arch_vf": [512, 512],
     "rollout_length_steps": 1024,
     "total_timesteps": 2000000,
