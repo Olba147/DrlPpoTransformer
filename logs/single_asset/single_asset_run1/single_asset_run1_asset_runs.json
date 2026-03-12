@@ -1,0 +1,236 @@
+{
+  "run_name": "single_asset_run1",
+  "rows": [
+    {
+      "asset": "AAPL",
+      "model_name": "single_asset_run1_ppo_AAPL",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/AAPL_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_AAPL/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "AMGN",
+      "model_name": "single_asset_run1_ppo_AMGN",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/AMGN_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_AMGN/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "AMZN",
+      "model_name": "single_asset_run1_ppo_AMZN",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/AMZN_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_AMZN/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "AXP",
+      "model_name": "single_asset_run1_ppo_AXP",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/AXP_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_AXP/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "BA",
+      "model_name": "single_asset_run1_ppo_BA",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/BA_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_BA/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "CAT",
+      "model_name": "single_asset_run1_ppo_CAT",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/CAT_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_CAT/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "CRM",
+      "model_name": "single_asset_run1_ppo_CRM",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/CRM_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_CRM/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "CSCO",
+      "model_name": "single_asset_run1_ppo_CSCO",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/CSCO_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_CSCO/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "CVX",
+      "model_name": "single_asset_run1_ppo_CVX",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/CVX_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_CVX/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "DIA",
+      "model_name": "single_asset_run1_ppo_DIA",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/DIA_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_DIA/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "DIS",
+      "model_name": "single_asset_run1_ppo_DIS",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/DIS_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_DIS/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "GS",
+      "model_name": "single_asset_run1_ppo_GS",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/GS_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_GS/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "HD",
+      "model_name": "single_asset_run1_ppo_HD",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/HD_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_HD/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "HON",
+      "model_name": "single_asset_run1_ppo_HON",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/HON_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_HON/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "IBM",
+      "model_name": "single_asset_run1_ppo_IBM",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/IBM_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_IBM/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "JNJ",
+      "model_name": "single_asset_run1_ppo_JNJ",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/JNJ_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_JNJ/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "JPM",
+      "model_name": "single_asset_run1_ppo_JPM",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/JPM_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_JPM/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "KO",
+      "model_name": "single_asset_run1_ppo_KO",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/KO_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_KO/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "MCD",
+      "model_name": "single_asset_run1_ppo_MCD",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/MCD_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_MCD/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "MMM",
+      "model_name": "single_asset_run1_ppo_MMM",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/MMM_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_MMM/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "MRK",
+      "model_name": "single_asset_run1_ppo_MRK",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/MRK_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_MRK/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "MSFT",
+      "model_name": "single_asset_run1_ppo_MSFT",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/MSFT_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_MSFT/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "NKE",
+      "model_name": "single_asset_run1_ppo_NKE",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/NKE_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_NKE/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "NVDA",
+      "model_name": "single_asset_run1_ppo_NVDA",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/NVDA_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_NVDA/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "PG",
+      "model_name": "single_asset_run1_ppo_PG",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/PG_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_PG/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "QQQ",
+      "model_name": "single_asset_run1_ppo_QQQ",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/QQQ_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_QQQ/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "SHW",
+      "model_name": "single_asset_run1_ppo_SHW",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/SHW_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_SHW/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "SPY",
+      "model_name": "single_asset_run1_ppo_SPY",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/SPY_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_SPY/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "TRV",
+      "model_name": "single_asset_run1_ppo_TRV",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/TRV_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_TRV/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "UNH",
+      "model_name": "single_asset_run1_ppo_UNH",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/UNH_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_UNH/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "V",
+      "model_name": "single_asset_run1_ppo_V",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/V_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_V/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "VZ",
+      "model_name": "single_asset_run1_ppo_VZ",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/VZ_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_VZ/best_model.zip",
+      "status": "trained"
+    },
+    {
+      "asset": "WMT",
+      "model_name": "single_asset_run1_ppo_WMT",
+      "config_path": "/root/DrlPpoTransformer/configs/generated/single_asset_run1/ppo/WMT_ppo.json",
+      "best_model_path": "checkpoints/single_asset/single_asset_run1/single_asset_run1_ppo_WMT/best_model.zip",
+      "status": "trained"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "jepa_config": "configs/jepa_pretrain_all.json",
+  "ppo_config": "configs/ppo_single_asset_ablation_basic.json",
+  "assets": {
+    "tickers": null,
+    "ticker_list_path": null,
+    "discover_from_dataset": true
+  },
+  "shared": {
+    "jepa_checkpoint_path": null
+  },
+  "training": {
+    "skip_existing": true
+  },
+  "output": {
+    "run_name": "single_asset_ablation_basic_run1",
+    "checkpoint_root": "checkpoints/single_asset",
+    "log_root": "logs/single_asset",
+    "generated_config_dir": "configs/generated/single_asset_ablation_basic_run1"
+  }
+}
