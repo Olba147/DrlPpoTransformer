@@ -87,6 +87,9 @@ def main(config_path: str | None = None, stage: str = "all") -> None:
 
     base_jepa_cfg = load_json_config(cfg["jepa_config"], "", __file__)
     base_ppo_cfg = load_json_config(cfg["ppo_config"], "", __file__)
+    ppo_feature_mode = str(base_ppo_cfg.get("ppo", {}).get("feature_mode", "jepa")).strip().lower()
+    if ppo_feature_mode not in {"jepa", "basic"}:
+        raise ValueError("ppo.feature_mode must be one of: jepa, basic")
     stage = str(stage).lower()
     if stage not in {"all", "jepa", "ppo"}:
         raise ValueError("stage must be one of: all, jepa, ppo")
@@ -122,11 +125,14 @@ def main(config_path: str | None = None, stage: str = "all") -> None:
     )
 
     if stage in {"all", "jepa"}:
-        print(f"[single-asset] Pretraining JEPA once: {jepa_cfg_path_out}")
-        train_jepa_main(str(jepa_cfg_path_out))
+        if ppo_feature_mode == "basic" and stage == "all":
+            print("[single-asset] Skipping JEPA pretraining (ppo.feature_mode=basic).")
+        else:
+            print(f"[single-asset] Pretraining JEPA once: {jepa_cfg_path_out}")
+            train_jepa_main(str(jepa_cfg_path_out))
 
     if stage in {"all", "ppo"}:
-        if not jepa_checkpoint.exists():
+        if ppo_feature_mode == "jepa" and not jepa_checkpoint.exists():
             raise FileNotFoundError(
                 f"Shared JEPA checkpoint not found: {jepa_checkpoint}. "
                 "Run stage=all/jepa first or set shared.jepa_checkpoint_path."
@@ -151,7 +157,11 @@ def main(config_path: str | None = None, stage: str = "all") -> None:
             ppo_cfg.setdefault("paths", {})
             ppo_cfg["paths"]["checkpoint_root"] = str(run_checkpoint_root)
             ppo_cfg["paths"]["log_root"] = str(run_log_root)
-            ppo_cfg["paths"]["jepa_checkpoint_path"] = str(jepa_checkpoint)
+            if ppo_feature_mode == "jepa":
+                ppo_cfg["paths"]["jepa_checkpoint_path"] = str(jepa_checkpoint)
+            else:
+                ppo_cfg["paths"]["jepa_checkpoint_path"] = None
+                ppo_cfg["paths"]["jepa_checkpoint_dir"] = None
             if "ticker_list_path" in ppo_cfg["paths"]:
                 ppo_cfg["paths"]["ticker_list_path"] = None
             ppo_cfg.setdefault("dataset", {})

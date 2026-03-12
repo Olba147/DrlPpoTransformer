@@ -363,7 +363,11 @@ def main(config_path: str | None = None):
     paths_cfg = cfg["paths"]
     dataset_cfg = cfg["dataset"]
     env_cfg = cfg["env"]
-    jepa_cfg = cfg["jepa_model"]
+    ppo_cfg = cfg.get("ppo", {})
+    feature_mode = str(ppo_cfg.get("feature_mode", "jepa")).strip().lower()
+    if feature_mode not in {"jepa", "basic"}:
+        raise ValueError("ppo.feature_mode must be either 'jepa' or 'basic'.")
+    jepa_cfg = cfg.get("jepa_model", {})
     test_cfg = cfg.get("test", {})
 
     checkpoint_root = paths_cfg.get("checkpoint_root", "checkpoints")
@@ -373,16 +377,20 @@ def main(config_path: str | None = None):
     ppo_checkpoint_path = test_cfg.get("ppo_checkpoint_path") or os.path.join(
         checkpoint_root, model_name, "best_model.zip"
     )
-    jepa_checkpoint_path = (
-        test_cfg.get("jepa_checkpoint_path")
-        or paths_cfg.get("jepa_checkpoint_path")
-        or os.path.join(paths_cfg["jepa_checkpoint_dir"], "best.pt")
-    )
+    jepa_checkpoint_path = None
+    if feature_mode == "jepa":
+        jepa_checkpoint_path = (
+            test_cfg.get("jepa_checkpoint_path")
+            or paths_cfg.get("jepa_checkpoint_path")
+            or os.path.join(paths_cfg["jepa_checkpoint_dir"], "best.pt")
+        )
 
     print("Loading test dataset...")
     dataset_kwargs = _build_dataset_kwargs(cfg, split=split)
 
-    asset_universe = load_asset_universe_from_checkpoint(jepa_checkpoint_path)
+    asset_universe = None
+    if feature_mode == "jepa":
+        asset_universe = load_asset_universe_from_checkpoint(jepa_checkpoint_path)
     if not asset_universe:
         asset_universe = load_tickers(paths_cfg.get("asset_universe_path"))
     if asset_universe:
@@ -400,28 +408,37 @@ def main(config_path: str | None = None):
         raise RuntimeError("No assets found in the test dataset.")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("Loading JEPA model...")
-    num_asset_ids = int(getattr(test_dataset, "num_asset_ids", len(test_dataset.asset_ids)))
-    jepa_model = build_jepa_model(
-        device,
-        num_assets=num_asset_ids,
-        jepa_cfg=jepa_cfg,
-        checkpoint_path=jepa_checkpoint_path,
-        context_len_steps=cfg["dataset"]["context_len"],
-    )
+    print(f"Feature mode: {feature_mode}")
+    jepa_model = None
+    if feature_mode == "jepa":
+        print("Loading JEPA model...")
+        num_asset_ids = int(getattr(test_dataset, "num_asset_ids", len(test_dataset.asset_ids)))
+        jepa_model = build_jepa_model(
+            device,
+            num_assets=num_asset_ids,
+            jepa_cfg=jepa_cfg,
+            checkpoint_path=str(jepa_checkpoint_path),
+            context_len_steps=cfg["dataset"]["context_len"],
+        )
 
+    pi_arch = ppo_cfg.get("net_arch_pi", [128, 128])
+    vf_arch = ppo_cfg.get("net_arch_vf", [256, 256])
+    share_features_extractor = bool(ppo_cfg.get("share_features_extractor", False))
     policy_kwargs = dict(
-        features_extractor_class=JEPAAuxFeatureExtractor,
-        features_extractor_kwargs=dict(
-            jepa_model=jepa_model,
-            embedding_dim=jepa_cfg["d_model"],
-            patch_len=jepa_cfg["patch_len"],
-            patch_stride=jepa_cfg["patch_stride"],
-            attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
-        ),
-        share_features_extractor=False,
-        net_arch=dict(pi=[256, 256], vf=[256, 256]),
+        share_features_extractor=share_features_extractor,
+        net_arch=dict(pi=pi_arch, vf=vf_arch),
     )
+    if feature_mode == "jepa":
+        policy_kwargs.update(
+            features_extractor_class=JEPAAuxFeatureExtractor,
+            features_extractor_kwargs=dict(
+                jepa_model=jepa_model,
+                embedding_dim=jepa_cfg["d_model"],
+                patch_len=jepa_cfg["patch_len"],
+                patch_stride=jepa_cfg["patch_stride"],
+                attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
+            ),
+        )
 
     print(f"Loading PPO model from {ppo_checkpoint_path}...")
     model = load_ppo_model(ppo_checkpoint_path, device=device, policy_kwargs=policy_kwargs)

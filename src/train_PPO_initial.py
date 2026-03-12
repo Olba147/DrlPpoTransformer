@@ -113,7 +113,11 @@ def main(config_path: str | None = None):
     env_cfg = cfg["env"]
     ppo_cfg = cfg["ppo"]
     eval_cfg = cfg["evaluation"]
-    jepa_cfg = cfg["jepa_model"]
+    jepa_cfg = cfg.get("jepa_model", {})
+    feature_mode = str(ppo_cfg.get("feature_mode", "jepa")).strip().lower()
+    if feature_mode not in {"jepa", "basic"}:
+        raise ValueError("ppo.feature_mode must be either 'jepa' or 'basic'.")
+    print(f"Feature mode: {feature_mode}")
 
     if ppo_cfg.get("update_jepa", False):
         raise ValueError(
@@ -126,10 +130,13 @@ def main(config_path: str | None = None):
     jepa_checkpoint_dir = paths_cfg.get("jepa_checkpoint_dir")
     ppo_checkpoint_dir = os.path.join(checkpoint_root, model_name)
     jepa_checkpoint_path = paths_cfg.get("jepa_checkpoint_path")
-    if not jepa_checkpoint_path:
-        if not jepa_checkpoint_dir:
-            raise ValueError("Set either paths.jepa_checkpoint_path or paths.jepa_checkpoint_dir in config.")
-        jepa_checkpoint_path = os.path.join(jepa_checkpoint_dir, "best.pt")
+    if feature_mode == "jepa":
+        if not jepa_checkpoint_path:
+            if not jepa_checkpoint_dir:
+                raise ValueError("Set either paths.jepa_checkpoint_path or paths.jepa_checkpoint_dir in config.")
+            jepa_checkpoint_path = os.path.join(jepa_checkpoint_dir, "best.pt")
+    else:
+        jepa_checkpoint_path = None
 
     run_dataset_kwargs = _build_dataset_kwargs(cfg)
 
@@ -141,7 +148,7 @@ def main(config_path: str | None = None):
 
     asset_universe = None
     jepa_checkpoint = None
-    if os.path.exists(jepa_checkpoint_path):
+    if feature_mode == "jepa" and jepa_checkpoint_path and os.path.exists(jepa_checkpoint_path):
         jepa_checkpoint = torch.load(jepa_checkpoint_path, map_location="cpu")
         asset_universe = jepa_checkpoint.get("asset_universe")
     if not asset_universe:
@@ -216,99 +223,113 @@ def main(config_path: str | None = None):
         f"episode_len={eval_episode_len}, "
         f"n_eval_episodes={eval_n_episodes}."
     )
-    # number of assets, and whether to use asset embeddings
-    use_asset_embeddings = jepa_cfg.get("use_asset_embeddings", True) and include_asset_id
-    encoder_num_assets = num_assets if use_asset_embeddings else None
-    print(f"Asset embeddings: {use_asset_embeddings}, {encoder_num_assets} assets")
+    jepa_model = None
+    if feature_mode == "jepa":
+        # number of assets, and whether to use asset embeddings
+        use_asset_embeddings = jepa_cfg.get("use_asset_embeddings", True) and include_asset_id
+        encoder_num_assets = num_assets if use_asset_embeddings else None
+        print(f"Asset embeddings: {use_asset_embeddings}, {encoder_num_assets} assets")
 
-    print("Loading JEPA encoder...")
-    patch_len = int(jepa_cfg["patch_len"])
-    patch_stride = int(jepa_cfg["patch_stride"])
-    context_len_steps = int(jepa_cfg.get("context_len_steps", dataset_cfg["context_len"]))
-    if context_len_steps < patch_len:
-        raise ValueError(
-            f"jepa_model.context_len_steps must be >= patch_len ({patch_len}), got {context_len_steps}."
+        print("Loading JEPA encoder...")
+        patch_len = int(jepa_cfg["patch_len"])
+        patch_stride = int(jepa_cfg["patch_stride"])
+        context_len_steps = int(jepa_cfg.get("context_len_steps", dataset_cfg["context_len"]))
+        if context_len_steps < patch_len:
+            raise ValueError(
+                f"jepa_model.context_len_steps must be >= patch_len ({patch_len}), got {context_len_steps}."
+            )
+        if (context_len_steps - patch_len) % patch_stride != 0:
+            raise ValueError(
+                f"(context_len_steps - patch_len) must be divisible by patch_stride. "
+                f"Got context_len_steps={context_len_steps}, patch_len={patch_len}, patch_stride={patch_stride}."
+            )
+        context_tokens = 1 + (context_len_steps - patch_len) // patch_stride
+        horizon_blocks = jepa_cfg.get(
+            "horizon_blocks",
+            {
+                "near": [1, 1],
+                "med": [2, 5],
+                "far": [6, 17],
+            },
         )
-    if (context_len_steps - patch_len) % patch_stride != 0:
-        raise ValueError(
-            f"(context_len_steps - patch_len) must be divisible by patch_stride. "
-            f"Got context_len_steps={context_len_steps}, patch_len={patch_len}, patch_stride={patch_stride}."
+
+        jepa_context_encoder = PatchTSTEncoder(
+            patch_len=jepa_cfg["patch_len"],
+            d_model=jepa_cfg["d_model"],
+            n_features=jepa_cfg["n_features"],
+            n_time_features=jepa_cfg["n_time_features"],
+            nhead=jepa_cfg["nhead"],
+            num_layers=jepa_cfg["num_layers"],
+            dim_ff=jepa_cfg["dim_ff"],
+            dropout=jepa_cfg["dropout"],
+            num_assets=encoder_num_assets,
         )
-    context_tokens = 1 + (context_len_steps - patch_len) // patch_stride
-    horizon_blocks = jepa_cfg.get(
-        "horizon_blocks",
-        {
-            "near": [1, 1],
-            "med": [2, 5],
-            "far": [6, 17],
-        },
-    )
 
-    jepa_context_encoder = PatchTSTEncoder(
-        patch_len=jepa_cfg["patch_len"],
-        d_model=jepa_cfg["d_model"],
-        n_features=jepa_cfg["n_features"],
-        n_time_features=jepa_cfg["n_time_features"],
-        nhead=jepa_cfg["nhead"],
-        num_layers=jepa_cfg["num_layers"],
-        dim_ff=jepa_cfg["dim_ff"],
-        dropout=jepa_cfg["dropout"],
-        num_assets=encoder_num_assets,
-    )
+        jepa_target_encoder = copy.deepcopy(jepa_context_encoder)
 
-    jepa_target_encoder = copy.deepcopy(jepa_context_encoder)
+        jepa_model = JEPA(
+            jepa_context_encoder,
+            jepa_target_encoder,
+            d_model=jepa_cfg["d_model"],
+            ema_tau_min=jepa_cfg["ema_tau_min"],
+            ema_tau_max=jepa_cfg["ema_tau_max"],
+            nhead=jepa_cfg["nhead"],
+            dim_ff=jepa_cfg["dim_ff"],
+            dropout=jepa_cfg["dropout"],
+            predictor_num_layers=jepa_cfg.get("predictor_num_layers", 2),
+            context_tokens=context_tokens,
+            horizon_blocks=horizon_blocks,
+        )
 
-    jepa_model = JEPA(
-        jepa_context_encoder,
-        jepa_target_encoder,
-        d_model=jepa_cfg["d_model"],
-        ema_tau_min=jepa_cfg["ema_tau_min"],
-        ema_tau_max=jepa_cfg["ema_tau_max"],
-        nhead=jepa_cfg["nhead"],
-        dim_ff=jepa_cfg["dim_ff"],
-        dropout=jepa_cfg["dropout"],
-        predictor_num_layers=jepa_cfg.get("predictor_num_layers", 2),
-        context_tokens=context_tokens,
-        horizon_blocks=horizon_blocks,
-    )
+        checkpoint_path = str(jepa_checkpoint_path)
+        if os.path.exists(checkpoint_path):
+            print(f"Loading JEPA weights from {checkpoint_path}")
+            checkpoint = (
+                jepa_checkpoint
+                if jepa_checkpoint is not None
+                else torch.load(checkpoint_path, map_location="cpu")
+            )
+            missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
+            if missing:
+                print(f"Missing keys in checkpoint: {missing}")
+            if unexpected:
+                print(f"Unexpected keys in checkpoint: {unexpected}")
+        else:
+            print("No JEPA checkpoint found, using randomly initialized encoder.")
 
-    checkpoint_path = jepa_checkpoint_path
-    if os.path.exists(checkpoint_path):
-        print(f"Loading JEPA weights from {checkpoint_path}")
-        checkpoint = jepa_checkpoint if jepa_checkpoint is not None else torch.load(checkpoint_path, map_location="cpu")
-        missing, unexpected = jepa_model.load_state_dict(checkpoint["model"], strict=False)
-        if missing:
-            print(f"Missing keys in checkpoint: {missing}")
-        if unexpected:
-            print(f"Unexpected keys in checkpoint: {unexpected}")
+        for param in jepa_model.parameters():
+            param.requires_grad = False
+        jepa_model.eval()
     else:
-        print("No JEPA checkpoint found, using randomly initialized encoder.")
-
-    for param in jepa_model.parameters():
-        param.requires_grad = False
-    jepa_model.eval()
+        print("JEPA loading skipped (ppo.feature_mode=basic).")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     optimizer_name = ppo_cfg.get("optimizer", "adam")
     optimizer_kwargs = ppo_cfg.get("optimizer_kwargs")
     policy_learning_rate = ppo_cfg.get("policy_learning_rate")
+    pi_arch = ppo_cfg.get("net_arch_pi", [128, 128])
+    vf_arch = ppo_cfg.get("net_arch_vf", [256, 256])
+    share_features_extractor = bool(ppo_cfg.get("share_features_extractor", False))
     print(
         "Optimizer setup: "
         f"name={optimizer_name}, policy_lr={policy_learning_rate or ppo_cfg['learning_rate']}, "
-        "jepa_lr=frozen"
+        f"feature_mode={feature_mode}"
     )
     policy_kwargs = dict(
-        features_extractor_class=JEPAAuxFeatureExtractor,
-        features_extractor_kwargs=dict(
-            jepa_model=jepa_model,
-            embedding_dim=jepa_cfg["d_model"],
-            patch_len=jepa_cfg["patch_len"],
-            patch_stride=jepa_cfg["patch_stride"],
-            attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
-        ),
-        share_features_extractor=False,
-        net_arch=dict(pi=[128, 128], vf=[256, 256])
+        share_features_extractor=share_features_extractor,
+        net_arch=dict(pi=pi_arch, vf=vf_arch),
     )
+    if feature_mode == "jepa":
+        policy_kwargs.update(
+            features_extractor_class=JEPAAuxFeatureExtractor,
+            features_extractor_kwargs=dict(
+                jepa_model=jepa_model,
+                embedding_dim=jepa_cfg["d_model"],
+                patch_len=jepa_cfg["patch_len"],
+                patch_stride=jepa_cfg["patch_stride"],
+                attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
+            ),
+        )
 
     resume_path = resume_cfg.get("path")
     if resume_path is None and resume_cfg.get("auto_resume", False):
@@ -414,7 +435,7 @@ def main(config_path: str | None = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train PPO with JEPA auxiliary objective")
+    parser = argparse.ArgumentParser(description="Train PPO (JEPA features or basic dict extractor)")
     parser.add_argument("--config", type=str, default=None, help="Path to JSON config file")
     args = parser.parse_args()
     main(config_path=args.config)
