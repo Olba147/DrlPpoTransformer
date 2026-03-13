@@ -34,7 +34,7 @@
     "transaction_cost_warmup": 0,
     "include_wealth": false,
     "include_asset_id": false,
-    "reward_scale": 10.0,
+    "reward_scale": 1.0,
     "allow_short": true,
     "action_mode": "discrete_3"
   },
@@ -64,7 +64,7 @@
     "gamma": 0.99,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef_start": 0.1,
+    "ent_coef_start": 0.02,
     "ent_coef_end": 0.0005,
     "ent_decay_steps": 1000000,
     "ent_warmup_fraction": 0.0,
