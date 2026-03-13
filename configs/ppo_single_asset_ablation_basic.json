@@ -53,7 +53,7 @@
       "attn_pool_heads": 4,
       "use_asset_embeddings": false
     },
-    "share_features_extractor": false,
+    "share_features_extractor": true,
     "net_arch_pi": [128, 128],
     "net_arch_vf": [128, 128],
     "rollout_length_steps": 1024,
