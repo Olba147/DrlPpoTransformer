@@ -9,7 +9,7 @@ import torch
 
 from config.config_utils import load_json_config
 from Datasets.multi_asset_dataset import Dataset_Finance_MultiAsset
-from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
+from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA, PatchTSTAuxFeatureExtractor
 from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 
@@ -365,8 +365,8 @@ def main(config_path: str | None = None):
     env_cfg = cfg["env"]
     ppo_cfg = cfg.get("ppo", {})
     feature_mode = str(ppo_cfg.get("feature_mode", "jepa")).strip().lower()
-    if feature_mode not in {"jepa", "basic"}:
-        raise ValueError("ppo.feature_mode must be either 'jepa' or 'basic'.")
+    if feature_mode not in {"jepa", "patch"}:
+        raise ValueError("ppo.feature_mode must be either 'jepa' or 'patch'.")
     jepa_cfg = cfg.get("jepa_model", {})
     test_cfg = cfg.get("test", {})
 
@@ -424,6 +424,7 @@ def main(config_path: str | None = None):
     pi_arch = ppo_cfg.get("net_arch_pi", [128, 128])
     vf_arch = ppo_cfg.get("net_arch_vf", [256, 256])
     share_features_extractor = bool(ppo_cfg.get("share_features_extractor", False))
+    include_asset_id = bool(env_cfg.get("include_asset_id", True))
     policy_kwargs = dict(
         share_features_extractor=share_features_extractor,
         net_arch=dict(pi=pi_arch, vf=vf_arch),
@@ -437,6 +438,32 @@ def main(config_path: str | None = None):
                 patch_len=jepa_cfg["patch_len"],
                 patch_stride=jepa_cfg["patch_stride"],
                 attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
+            ),
+        )
+    else:
+        patch_cfg = ppo_cfg.get("patch_encoder", {})
+        if not patch_cfg:
+            raise ValueError(
+                "ppo.patch_encoder config is required when ppo.feature_mode='patch'."
+            )
+        obs_n_features = int(test_dataset.data_x[test_dataset.asset_ids[0]].shape[-1])
+        obs_n_time_features = int(test_dataset.dates[test_dataset.asset_ids[0]].shape[-1])
+        use_asset_embeddings = bool(patch_cfg.get("use_asset_embeddings", False) and include_asset_id)
+        policy_kwargs.update(
+            features_extractor_class=PatchTSTAuxFeatureExtractor,
+            features_extractor_kwargs=dict(
+                embedding_dim=int(patch_cfg.get("d_model", 64)),
+                patch_len=int(patch_cfg.get("patch_len", 8)),
+                patch_stride=int(patch_cfg.get("patch_stride", 8)),
+                n_features=int(patch_cfg.get("n_features", obs_n_features)),
+                n_time_features=int(patch_cfg.get("n_time_features", obs_n_time_features)),
+                nhead=int(patch_cfg.get("nhead", 4)),
+                num_layers=int(patch_cfg.get("num_layers", 4)),
+                dim_ff=int(patch_cfg.get("dim_ff", 256)),
+                dropout=float(patch_cfg.get("dropout", 0.1)),
+                attn_pool_heads=int(patch_cfg.get("attn_pool_heads", 4)),
+                use_asset_embeddings=use_asset_embeddings,
+                num_assets=(int(getattr(test_dataset, "num_asset_ids", len(test_dataset.asset_ids))) if use_asset_embeddings else None),
             ),
         )
 
@@ -455,7 +482,6 @@ def main(config_path: str | None = None):
     allow_short = bool(env_cfg.get("allow_short", True))
     action_mode = str(env_cfg.get("action_mode", "continuous"))
     include_wealth = bool(env_cfg.get("include_wealth", True))
-    include_asset_id = bool(env_cfg.get("include_asset_id", True))
     obs_space_keys = set(model.policy.observation_space.spaces.keys())
 
     print(f"Evaluating {len(test_dataset.asset_ids)} assets on split='{split}'...")

@@ -16,6 +16,7 @@ from stable_baselines3.common.utils import explained_variance
 
 from Training.callbacks import make_patches
 from models.jepa.jepa import JEPA
+from models.time_series.patchTransformer import PatchTSTEncoder
 
 
 class AttentionPooling(nn.Module):
@@ -89,8 +90,6 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         return make_patches(x, self.patch_len, self.patch_stride)
 
     def forward(self, observations: Dict[str, th.Tensor]) -> th.Tensor:
-        x_context = self._ensure_batched(observations["x_context"])
-        t_context = self._ensure_batched(observations["t_context"])
         asset_id = self._get_asset_id(observations)
 
         # Features for PPO: use full context embedding
@@ -100,6 +99,119 @@ class JEPAAuxFeatureExtractor(BaseFeaturesExtractor):
         t_full_p = self._patch(t_full)
 
         tokens = self.jepa_model.context_enc(
+            x_full_p,
+            t_full_p,
+            asset_id=asset_id,
+            return_tokens=True,
+        )
+        z_t = self.attn_pool(tokens)
+
+        w_prev = observations.get("w_prev", None)
+        wealth_feats = observations.get("wealth_feats", None)
+        if w_prev is None:
+            w_prev = th.zeros((z_t.size(0), 0), device=z_t.device)
+        if wealth_feats is None:
+            wealth_feats = th.zeros((z_t.size(0), 0), device=z_t.device)
+        if w_prev.dim() == 1:
+            w_prev = w_prev.unsqueeze(0)
+        if wealth_feats.dim() == 1:
+            wealth_feats = wealth_feats.unsqueeze(0)
+
+        asset_raw = observations.get("asset_id", None)
+        if asset_raw is None or self.asset_dim == 0:
+            asset_feat = th.zeros((z_t.size(0), 0), device=z_t.device)
+        else:
+            asset_feat = asset_raw
+            if asset_feat.dim() == 1:
+                asset_feat = asset_feat.view(1, self.asset_dim)
+            elif asset_feat.dim() == 2:
+                pass
+            elif asset_feat.dim() == 3 and asset_feat.shape[1] == 1 and asset_feat.shape[2] == self.asset_dim:
+                asset_feat = asset_feat.squeeze(1)
+            else:
+                raise ValueError(f"Unexpected asset_id shape {tuple(asset_feat.shape)} for asset_dim {self.asset_dim}")
+
+        return th.cat([z_t, w_prev, wealth_feats, asset_feat], dim=-1)
+
+
+class PatchTSTAuxFeatureExtractor(BaseFeaturesExtractor):
+    def __init__(
+        self,
+        observation_space: spaces.Dict,
+        embedding_dim: int,
+        patch_len: int,
+        patch_stride: int,
+        n_features: int,
+        n_time_features: int,
+        nhead: int,
+        num_layers: int,
+        dim_ff: int,
+        dropout: float,
+        attn_pool_heads: int = 4,
+        use_asset_embeddings: bool = False,
+        num_assets: int | None = None,
+    ) -> None:
+        w_prev_dim = observation_space["w_prev"].shape[0] if "w_prev" in observation_space.spaces else 0
+        wealth_dim = observation_space["wealth_feats"].shape[0] if "wealth_feats" in observation_space.spaces else 0
+        asset_dim = 0
+        if "asset_id" in observation_space.spaces:
+            asset_space = observation_space["asset_id"]
+            if isinstance(asset_space, spaces.Discrete):
+                asset_dim = int(asset_space.n)
+            else:
+                asset_dim = int(np.prod(asset_space.shape))
+        features_dim = embedding_dim + w_prev_dim + wealth_dim + asset_dim
+        super().__init__(observation_space, features_dim=features_dim)
+
+        if use_asset_embeddings and num_assets is None:
+            raise ValueError("num_assets must be provided when use_asset_embeddings=true.")
+
+        self.embedding_dim = embedding_dim
+        self.patch_len = patch_len
+        self.patch_stride = patch_stride
+        self.asset_dim = asset_dim
+        self.encoder = PatchTSTEncoder(
+            patch_len=patch_len,
+            d_model=embedding_dim,
+            n_features=n_features,
+            n_time_features=n_time_features,
+            nhead=nhead,
+            num_layers=num_layers,
+            dim_ff=dim_ff,
+            dropout=dropout,
+            num_assets=num_assets if use_asset_embeddings else None,
+        )
+        self.attn_pool = AttentionPooling(embedding_dim, num_heads=attn_pool_heads)
+
+    def _ensure_batched(self, x: th.Tensor) -> th.Tensor:
+        if x.dim() == 2:
+            return x.unsqueeze(0)
+        return x
+
+    def _get_asset_id(self, observations: Dict[str, th.Tensor]) -> Optional[th.Tensor]:
+        asset_id = observations.get("asset_id")
+        if asset_id is None:
+            return None
+        if asset_id.dim() >= 2 and asset_id.shape[-1] > 1:
+            asset_id = th.argmax(asset_id, dim=-1)
+        if asset_id.dim() == 0:
+            asset_id = asset_id.unsqueeze(0)
+        if asset_id.dim() == 2 and asset_id.shape[1] == 1:
+            asset_id = asset_id.squeeze(1)
+        return asset_id.long()
+
+    def _patch(self, x: th.Tensor) -> th.Tensor:
+        return make_patches(x, self.patch_len, self.patch_stride)
+
+    def forward(self, observations: Dict[str, th.Tensor]) -> th.Tensor:
+        asset_id = self._get_asset_id(observations)
+
+        x_full = self._ensure_batched(observations["x_context"])
+        t_full = self._ensure_batched(observations["t_context"])
+        x_full_p = self._patch(x_full)
+        t_full_p = self._patch(t_full)
+
+        tokens = self.encoder(
             x_full_p,
             t_full_p,
             asset_id=asset_id,

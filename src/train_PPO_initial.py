@@ -17,7 +17,7 @@ from Training.callbacks import (
     TransactionCostScheduleCallback,
 )
 from Training.ppo_env import GymTradingEnv
-from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA
+from Training.sb3_jepa_ppo import JEPAAuxFeatureExtractor, PPOWithJEPA, PatchTSTAuxFeatureExtractor
 from models.jepa.jepa import JEPA
 from models.time_series.patchTransformer import PatchTSTEncoder
 
@@ -115,8 +115,8 @@ def main(config_path: str | None = None):
     eval_cfg = cfg["evaluation"]
     jepa_cfg = cfg.get("jepa_model", {})
     feature_mode = str(ppo_cfg.get("feature_mode", "jepa")).strip().lower()
-    if feature_mode not in {"jepa", "basic"}:
-        raise ValueError("ppo.feature_mode must be either 'jepa' or 'basic'.")
+    if feature_mode not in {"jepa", "patch"}:
+        raise ValueError("ppo.feature_mode must be either 'jepa' or 'patch'.")
     print(f"Feature mode: {feature_mode}")
 
     if ppo_cfg.get("update_jepa", False):
@@ -135,7 +135,7 @@ def main(config_path: str | None = None):
             if not jepa_checkpoint_dir:
                 raise ValueError("Set either paths.jepa_checkpoint_path or paths.jepa_checkpoint_dir in config.")
             jepa_checkpoint_path = os.path.join(jepa_checkpoint_dir, "best.pt")
-    else:
+    elif feature_mode == "patch":
         jepa_checkpoint_path = None
 
     run_dataset_kwargs = _build_dataset_kwargs(cfg)
@@ -301,7 +301,7 @@ def main(config_path: str | None = None):
             param.requires_grad = False
         jepa_model.eval()
     else:
-        print("JEPA loading skipped (ppo.feature_mode=basic).")
+        print("JEPA loading skipped (ppo.feature_mode=patch).")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     optimizer_name = ppo_cfg.get("optimizer", "adam")
@@ -328,6 +328,32 @@ def main(config_path: str | None = None):
                 patch_len=jepa_cfg["patch_len"],
                 patch_stride=jepa_cfg["patch_stride"],
                 attn_pool_heads=jepa_cfg.get("attn_pool_heads", 4),
+            ),
+        )
+    else:
+        patch_cfg = ppo_cfg.get("patch_encoder", {})
+        if not patch_cfg:
+            raise ValueError(
+                "ppo.patch_encoder config is required when ppo.feature_mode='patch'."
+            )
+        obs_n_features = int(train_dataset.data_x[train_dataset.asset_ids[0]].shape[-1])
+        obs_n_time_features = int(train_dataset.dates[train_dataset.asset_ids[0]].shape[-1])
+        use_asset_embeddings = bool(patch_cfg.get("use_asset_embeddings", False) and include_asset_id)
+        policy_kwargs.update(
+            features_extractor_class=PatchTSTAuxFeatureExtractor,
+            features_extractor_kwargs=dict(
+                embedding_dim=int(patch_cfg.get("d_model", 64)),
+                patch_len=int(patch_cfg.get("patch_len", 8)),
+                patch_stride=int(patch_cfg.get("patch_stride", 8)),
+                n_features=int(patch_cfg.get("n_features", obs_n_features)),
+                n_time_features=int(patch_cfg.get("n_time_features", obs_n_time_features)),
+                nhead=int(patch_cfg.get("nhead", 4)),
+                num_layers=int(patch_cfg.get("num_layers", 4)),
+                dim_ff=int(patch_cfg.get("dim_ff", 256)),
+                dropout=float(patch_cfg.get("dropout", 0.1)),
+                attn_pool_heads=int(patch_cfg.get("attn_pool_heads", 4)),
+                use_asset_embeddings=use_asset_embeddings,
+                num_assets=(num_assets if use_asset_embeddings else None),
             ),
         )
 
@@ -435,7 +461,7 @@ def main(config_path: str | None = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train PPO (JEPA features or basic dict extractor)")
+    parser = argparse.ArgumentParser(description="Train PPO (JEPA features or trainable patch-transformer features)")
     parser.add_argument("--config", type=str, default=None, help="Path to JSON config file")
     args = parser.parse_args()
     main(config_path=args.config)

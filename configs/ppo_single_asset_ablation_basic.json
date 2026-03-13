@@ -39,7 +39,20 @@
     "action_mode": "discrete_3"
   },
   "ppo": {
-    "feature_mode": "basic",
+    "feature_mode": "patch",
+    "patch_encoder": {
+      "patch_len": 8,
+      "patch_stride": 8,
+      "d_model": 64,
+      "n_features": 9,
+      "n_time_features": 2,
+      "nhead": 4,
+      "num_layers": 4,
+      "dim_ff": 256,
+      "dropout": 0.1,
+      "attn_pool_heads": 4,
+      "use_asset_embeddings": false
+    },
     "share_features_extractor": false,
     "net_arch_pi": [128, 128],
     "net_arch_vf": [256, 256],
