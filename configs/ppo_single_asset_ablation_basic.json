@@ -26,7 +26,7 @@
   },
   "env": {
     "episode_length_steps": 2048,
-    "n_envs": 8,
+    "n_envs": 16,
     "transaction_cost_start": 0.0005,
     "transaction_cost_end": 0.0005,
     "transaction_cost_steps": 0,
@@ -76,7 +76,7 @@
   "evaluation": {
     "episodes": 8,
     "episode_len": 1024,
-    "every_steps": 2048,
+    "every_steps": 1024,
     "checkpoint_every_steps": 20000,
     "moving_average_window": 20
   }
