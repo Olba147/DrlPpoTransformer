@@ -2,12 +2,12 @@ import argparse
 import copy
 import csv
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 from config.config_utils import load_json_config, resolve_config_path
-from train_jepa_initial import main as train_jepa_main
-from train_PPO_initial import main as train_ppo_main
 
 DEFAULT_CONFIG_PATH = "configs/single_asset_run.json"
 
@@ -28,6 +28,12 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _run_python_entry(script_name: str, args: list[str]) -> None:
+    script_path = Path(__file__).resolve().parent / script_name
+    cmd = [sys.executable, str(script_path), *args]
+    subprocess.run(cmd, check=True)
 
 
 def _load_ticker_list(path: str | None) -> list[str]:
@@ -129,7 +135,7 @@ def main(config_path: str | None = None, stage: str = "all") -> None:
             print("[single-asset] Skipping JEPA pretraining (ppo.feature_mode=patch).")
         else:
             print(f"[single-asset] Pretraining JEPA once: {jepa_cfg_path_out}")
-            train_jepa_main(str(jepa_cfg_path_out))
+            _run_python_entry("train_jepa_initial.py", ["--config", str(jepa_cfg_path_out)])
 
     if stage in {"all", "ppo"}:
         if ppo_feature_mode == "jepa" and not jepa_checkpoint.exists():
@@ -176,7 +182,7 @@ def main(config_path: str | None = None, stage: str = "all") -> None:
                 status = "skipped_existing"
                 print(f"[single-asset] Skipping {asset_tag}; existing {best_model_path}")
             else:
-                train_ppo_main(str(asset_cfg_path))
+                _run_python_entry("train_PPO_initial.py", ["--config", str(asset_cfg_path)])
 
             manifest_rows.append(
                 {

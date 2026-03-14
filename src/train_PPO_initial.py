@@ -1,4 +1,5 @@
 import argparse
+import gc
 import os
 
 import numpy as np
@@ -357,107 +358,121 @@ def main(config_path: str | None = None):
             ),
         )
 
-    resume_path = resume_cfg.get("path")
-    if resume_path is None and resume_cfg.get("auto_resume", False):
-        resume_path = get_latest_checkpoint(ppo_checkpoint_dir)
-        if resume_path:
-            print(f"Auto-resume from latest PPO checkpoint: {resume_path}")
+    model = None
+    try:
+        resume_path = resume_cfg.get("path")
+        if resume_path is None and resume_cfg.get("auto_resume", False):
+            resume_path = get_latest_checkpoint(ppo_checkpoint_dir)
+            if resume_path:
+                print(f"Auto-resume from latest PPO checkpoint: {resume_path}")
 
-    if resume_path and os.path.exists(resume_path):
-        print(f"Resuming PPO from {resume_path}")
-        model = PPOWithJEPA.load(
-            resume_path,
-            env=train_env,
-            device=device,
-            custom_objects={"policy_kwargs": policy_kwargs},
+        if resume_path and os.path.exists(resume_path):
+            print(f"Resuming PPO from {resume_path}")
+            model = PPOWithJEPA.load(
+                resume_path,
+                env=train_env,
+                device=device,
+                custom_objects={"policy_kwargs": policy_kwargs},
+            )
+            model.tensorboard_log = log_root
+            model.update_jepa = False
+            model.optimizer_name = str(optimizer_name).lower()
+            model.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
+            model.policy_learning_rate = (
+                None if policy_learning_rate is None else float(policy_learning_rate)
+            )
+            model.configure_optimizer()
+        else:
+            model = PPOWithJEPA(
+                policy="MultiInputPolicy",
+                env=train_env,
+                learning_rate=ppo_cfg["learning_rate"],
+                n_steps=ppo_cfg["rollout_length_steps"],
+                batch_size=ppo_cfg["batch_size"],
+                n_epochs=ppo_cfg["n_epochs"],
+                gamma=ppo_cfg["gamma"],
+                gae_lambda=ppo_cfg["gae_lambda"],
+                clip_range=ppo_cfg["clip_range"],
+                ent_coef=ppo_cfg["ent_coef_start"],
+                vf_coef=ppo_cfg["vf_coef"],
+                max_grad_norm=ppo_cfg["max_grad_norm"],
+                target_kl=ppo_cfg["target_kl"],
+                update_jepa=False,
+                policy_kwargs=policy_kwargs,
+                device=device,
+                verbose=1,
+                tensorboard_log=log_root,
+                optimizer_name=optimizer_name,
+                optimizer_kwargs=optimizer_kwargs,
+                policy_learning_rate=policy_learning_rate,
+            )
+
+        callbacks = [
+            CustomTensorboardCallback(),
+            EntropyScheduleCallback(
+                total_timesteps=ppo_cfg["total_timesteps"],
+                warmup_fraction=ppo_cfg["ent_warmup_fraction"],
+                ent_coef_start=ppo_cfg["ent_coef_start"],
+                ent_coef_end=ppo_cfg["ent_coef_end"],
+                ent_decay_steps=ppo_cfg.get("ent_decay_steps"),
+            ),
+            TransactionCostScheduleCallback(
+                total_timesteps=ppo_cfg["total_timesteps"],
+                cost_start=transaction_cost_start,
+                cost_end=transaction_cost_end,
+                cost_steps=transaction_cost_steps,
+                cost_schedule_timesteps=transaction_cost_schedule_timesteps,
+                cost_warmup_timesteps=transaction_cost_warmup,
+                eval_env=eval_env,
+            ),
+            RewardEvalCallback(
+                eval_env,
+                best_model_save_path=f"{checkpoint_root}/{model_name}",
+                log_path=f"{log_root}/{model_name}_eval",
+                eval_freq=eval_cfg["every_steps"],
+                n_eval_episodes=eval_n_episodes,
+                deterministic=True,
+                moving_average_window=eval_cfg.get("moving_average_window", 20),
+            ),
+            LastModelCallback(
+                save_path=f"{checkpoint_root}/{model_name}/last_model.zip",
+                every_n_steps=eval_cfg["checkpoint_every_steps"],
+                verbose=1,
+            ),
+        ]
+
+        reset_num_timesteps_cfg = ppo_cfg.get("reset_num_timesteps")
+        if reset_num_timesteps_cfg is None:
+            # Default to non-cumulative timesteps unless user explicitly opts in.
+            reset_num_timesteps = True
+        else:
+            reset_num_timesteps = bool(reset_num_timesteps_cfg)
+
+        print(
+            "PPO learn setup: "
+            f"total_timesteps={int(ppo_cfg['total_timesteps'])}, "
+            f"reset_num_timesteps={reset_num_timesteps}, "
+            f"resume_path={resume_path if resume_path else 'None'}"
         )
-        model.tensorboard_log = log_root
-        model.update_jepa = False
-        model.optimizer_name = str(optimizer_name).lower()
-        model.optimizer_kwargs_custom = dict(optimizer_kwargs or {})
-        model.policy_learning_rate = (
-            None if policy_learning_rate is None else float(policy_learning_rate)
+
+        model.learn(
+            total_timesteps=int(ppo_cfg["total_timesteps"]),
+            callback=callbacks,
+            reset_num_timesteps=reset_num_timesteps,
+            tb_log_name=model_name,
         )
-        model.configure_optimizer()
-    else:
-        model = PPOWithJEPA(
-            policy="MultiInputPolicy",
-            env=train_env,
-            learning_rate=ppo_cfg["learning_rate"],
-            n_steps=ppo_cfg["rollout_length_steps"],
-            batch_size=ppo_cfg["batch_size"],
-            n_epochs=ppo_cfg["n_epochs"],
-            gamma=ppo_cfg["gamma"],
-            gae_lambda=ppo_cfg["gae_lambda"],
-            clip_range=ppo_cfg["clip_range"],
-            ent_coef=ppo_cfg["ent_coef_start"],
-            vf_coef=ppo_cfg["vf_coef"],
-            max_grad_norm=ppo_cfg["max_grad_norm"],
-            target_kl=ppo_cfg["target_kl"],
-            update_jepa=False,
-            policy_kwargs=policy_kwargs,
-            device=device,
-            verbose=1,
-            tensorboard_log=log_root,
-            optimizer_name=optimizer_name,
-            optimizer_kwargs=optimizer_kwargs,
-            policy_learning_rate=policy_learning_rate,
-        )
-
-    callbacks = [
-        CustomTensorboardCallback(),
-        EntropyScheduleCallback(
-            total_timesteps=ppo_cfg["total_timesteps"],
-            warmup_fraction=ppo_cfg["ent_warmup_fraction"],
-            ent_coef_start=ppo_cfg["ent_coef_start"],
-            ent_coef_end=ppo_cfg["ent_coef_end"],
-            ent_decay_steps=ppo_cfg.get("ent_decay_steps"),
-        ),
-        TransactionCostScheduleCallback(
-            total_timesteps=ppo_cfg["total_timesteps"],
-            cost_start=transaction_cost_start,
-            cost_end=transaction_cost_end,
-            cost_steps=transaction_cost_steps,
-            cost_schedule_timesteps=transaction_cost_schedule_timesteps,
-            cost_warmup_timesteps=transaction_cost_warmup,
-            eval_env=eval_env,
-        ),
-        RewardEvalCallback(
-            eval_env,
-            best_model_save_path=f"{checkpoint_root}/{model_name}",
-            log_path=f"{log_root}/{model_name}_eval",
-            eval_freq=eval_cfg["every_steps"],
-            n_eval_episodes=eval_n_episodes,
-            deterministic=True,
-            moving_average_window=eval_cfg.get("moving_average_window", 20),
-        ),
-        LastModelCallback(
-            save_path=f"{checkpoint_root}/{model_name}/last_model.zip",
-            every_n_steps=eval_cfg["checkpoint_every_steps"],
-            verbose=1,
-        ),
-    ]
-
-    reset_num_timesteps_cfg = ppo_cfg.get("reset_num_timesteps")
-    if reset_num_timesteps_cfg is None:
-        # Default to non-cumulative timesteps unless user explicitly opts in.
-        reset_num_timesteps = True
-    else:
-        reset_num_timesteps = bool(reset_num_timesteps_cfg)
-
-    print(
-        "PPO learn setup: "
-        f"total_timesteps={int(ppo_cfg['total_timesteps'])}, "
-        f"reset_num_timesteps={reset_num_timesteps}, "
-        f"resume_path={resume_path if resume_path else 'None'}"
-    )
-
-    model.learn(
-        total_timesteps=int(ppo_cfg["total_timesteps"]),
-        callback=callbacks,
-        reset_num_timesteps=reset_num_timesteps,
-        tb_log_name=model_name,
-    )
+    finally:
+        try:
+            if eval_env is not None:
+                eval_env.close()
+        finally:
+            if train_env is not None:
+                train_env.close()
+        if model is not None:
+            del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
 
 if __name__ == "__main__":
