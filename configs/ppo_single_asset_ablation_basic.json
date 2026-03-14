@@ -34,7 +34,7 @@
     "transaction_cost_warmup": 0,
     "include_wealth": false,
     "include_asset_id": false,
-    "reward_scale": 1.0,
+    "reward_scale": 10.0,
     "allow_short": true,
     "action_mode": "discrete_3"
   },
@@ -53,7 +53,7 @@
       "attn_pool_heads": 4,
       "use_asset_embeddings": false
     },
-    "share_features_extractor": true,
+    "share_features_extractor": false,
     "net_arch_pi": [128, 128],
     "net_arch_vf": [128, 128],
     "rollout_length_steps": 1024,
