@@ -54,8 +54,8 @@
       "use_asset_embeddings": false
     },
     "share_features_extractor": false,
-    "net_arch_pi": [128, 128],
-    "net_arch_vf": [128, 128],
+    "net_arch_pi": [64, 64],
+    "net_arch_vf": [64, 64],
     "rollout_length_steps": 1024,
     "total_timesteps": 2000000,
     "learning_rate": 0.0003,
@@ -76,7 +76,7 @@
   "evaluation": {
     "episodes": 8,
     "episode_len": 1024,
-    "every_steps": 2048,
+    "every_steps": 1024,
     "checkpoint_every_steps": 20000,
     "moving_average_window": 20
   }
